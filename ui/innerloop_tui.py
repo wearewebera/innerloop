@@ -62,14 +62,14 @@ class StreamGeneratorPanel(AgentPanel):
     """Panel showing raw stream of consciousness."""
     
     def __init__(self):
-        super().__init__("Stream Generator", wrap=True, highlight=True, markup=True)
+        super().__init__("Stream Generator", wrap=True, highlight=True, markup=True, max_lines=500, auto_scroll=True)
         
 
 class AttentionDirectorPanel(RichLog):
     """Panel showing attention evaluation and filtering."""
     
     def __init__(self):
-        super().__init__(wrap=True, highlight=True, markup=True)
+        super().__init__(wrap=True, highlight=True, markup=True, max_lines=500, auto_scroll=True)
         self.border_title = "Attention Director"
         
     def add_evaluation(self, content: str, priority: float, decision: str, 
@@ -115,7 +115,14 @@ class ConversationPanel(Vertical):
     
     def __init__(self):
         super().__init__()
-        self.conversation_log = RichLog(wrap=True, highlight=True, markup=True)
+        # Limit conversation log to prevent memory issues with long conversations
+        self.conversation_log = RichLog(
+            wrap=True, 
+            highlight=True, 
+            markup=True,
+            max_lines=1000,  # Keep only last 1000 lines
+            auto_scroll=True  # Auto-scroll to latest messages
+        )
         self.input_field = Input(placeholder="Type your message...")
         self.input_callback = None
         
@@ -148,8 +155,33 @@ class ConversationPanel(Vertical):
     async def on_input_submitted(self, event: Input.Submitted):
         """Handle input submission."""
         if self.input_callback and event.value.strip():
-            await self.input_callback(event.value)
+            # Clear input immediately before processing
+            value = event.value
             self.input_field.clear()
+            # Focus back on input field
+            self.input_field.focus()
+            # Process the input
+            await self.input_callback(value)
+
+
+class InternalProcessingPanel(RichLog):
+    """Panel showing internal processing and thoughts from the Experiencer."""
+    
+    def __init__(self):
+        super().__init__(wrap=True, highlight=True, markup=True, max_lines=500, auto_scroll=True)
+        self.border_title = "Internal Processing"
+        
+    def add_internal_thought(self, content: str):
+        """Add an internal thought or processing message."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        thought_text = Text()
+        thought_text.append(f"[{timestamp}] ", style="dim")
+        thought_text.append("💭 ", style="magenta")
+        thought_text.append(content, style="italic magenta")
+        thought_text.append("\n")
+        
+        self.write(thought_text)
 
 
 class StatusBar(Static):
@@ -170,9 +202,9 @@ class InnerLoopTUI(App):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2 2;
+        grid-size: 3 2;
         grid-rows: 1fr 1fr 1;
-        grid-columns: 1fr 1fr;
+        grid-columns: 1fr 1fr 1fr;
         grid-gutter: 1;
     }
     
@@ -190,15 +222,22 @@ class InnerLoopTUI(App):
         height: 100%;
     }
     
+    #internal-panel {
+        column-span: 1;
+        row-span: 1;
+        border: solid magenta;
+        height: 100%;
+    }
+    
     #conversation-panel {
-        column-span: 2;
+        column-span: 3;
         row-span: 1;
         border: solid cyan;
         height: 100%;
     }
     
     #status-bar {
-        column-span: 2;
+        column-span: 3;
         height: 1;
         dock: bottom;
         background: $surface;
@@ -215,6 +254,7 @@ class InnerLoopTUI(App):
         Binding("ctrl+l", "clear_all", "Clear All"),
         Binding("f1", "toggle_stream", "Toggle Stream"),
         Binding("f2", "toggle_attention", "Toggle Attention"),
+        Binding("f3", "toggle_internal", "Toggle Internal"),
     ]
     
     def __init__(self, message_bus=None, agents=None, config=None):
@@ -233,12 +273,14 @@ class InnerLoopTUI(App):
         self.stream_queue = asyncio.Queue(maxsize=1000)
         self.attention_queue = asyncio.Queue(maxsize=1000)
         self.conversation_queue = asyncio.Queue(maxsize=1000)
+        self.internal_queue = asyncio.Queue(maxsize=1000)
         
     def compose(self) -> ComposeResult:
         """Create child widgets."""
         yield Header(show_clock=True)
         
-        # Create panels
+        # Create panels - order matters for grid layout
+        # Top row: three monitoring panels
         self.stream_panel = StreamGeneratorPanel()
         self.stream_panel.id = "stream-panel"
         yield self.stream_panel
@@ -247,6 +289,11 @@ class InnerLoopTUI(App):
         self.attention_panel.id = "attention-panel"
         yield self.attention_panel
         
+        self.internal_panel = InternalProcessingPanel()
+        self.internal_panel.id = "internal-panel"
+        yield self.internal_panel
+        
+        # Bottom row: conversation panel (spans all columns)
         self.conversation_panel = ConversationPanel()
         self.conversation_panel.id = "conversation-panel"
         yield self.conversation_panel
@@ -344,9 +391,8 @@ class InnerLoopTUI(App):
                             self.filtered_count += 1
                             
                     elif msg.message_type == "internal_state":
-                        # Internal processing from experiencer
-                        await self.conversation_queue.put({
-                            'type': 'thought',
+                        # Internal processing from experiencer - route to internal panel
+                        await self.internal_queue.put({
                             'content': msg.content
                         })
                         
@@ -385,15 +431,10 @@ class InnerLoopTUI(App):
                 except asyncio.TimeoutError:
                     pass
                 
-                # Update conversation panel
+                # Update internal processing panel
                 try:
-                    conv_data = await asyncio.wait_for(self.conversation_queue.get(), timeout=0.01)
-                    if conv_data['type'] == 'thought':
-                        self.conversation_panel.add_message(
-                            "System",
-                            conv_data['content'],
-                            is_thought=True
-                        )
+                    internal_data = await asyncio.wait_for(self.internal_queue.get(), timeout=0.01)
+                    self.internal_panel.add_internal_thought(internal_data['content'])
                 except asyncio.TimeoutError:
                     pass
                     
@@ -433,6 +474,7 @@ class InnerLoopTUI(App):
         self.stream_panel.clear()
         self.attention_panel.clear()
         self.conversation_panel.conversation_log.clear()
+        self.internal_panel.clear()
         
     def action_toggle_stream(self):
         """Toggle stream panel visibility."""
@@ -441,3 +483,7 @@ class InnerLoopTUI(App):
     def action_toggle_attention(self):
         """Toggle attention panel visibility."""
         self.attention_panel.visible = not self.attention_panel.visible
+        
+    def action_toggle_internal(self):
+        """Toggle internal processing panel visibility."""
+        self.internal_panel.visible = not self.internal_panel.visible

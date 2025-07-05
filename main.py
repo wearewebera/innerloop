@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""InnerLoop - AI with autonomous initiative - Simple CLI version."""
+"""InnerLoop - AI with autonomous initiative."""
 
 import asyncio
 import os
@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 import structlog
 from typing import Optional
+import argparse
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -18,7 +19,6 @@ from agents.attention_director import AttentionDirectorAgent
 from communication.message_bus import MessageBus
 from memory.chromadb_store import ChromaMemoryStore
 from memory.conversation_log import ConversationLogger
-from ui.thought_display import ThoughtDisplay
 from ollama import AsyncClient
 
 # Configure structured logging
@@ -44,20 +44,24 @@ logger = structlog.get_logger()
 class InnerLoop:
     """Main InnerLoop system orchestrator."""
     
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "config.yaml", ui_mode: str = "tui"):
         self.config_path = config_path
+        self.ui_mode = ui_mode
         self.config = None
         self.agents = {}
         self.message_bus = None
         self.memory_store = None
         self.conversation_logger = None
-        self.thought_display = None
         self.session_id = None
         self.is_running = False
         
+        # UI components
+        self.ui_app = None
+        self.thought_display = None
+        
     async def initialize(self):
         """Initialize all system components."""
-        logger.info("Initializing InnerLoop...")
+        logger.info(f"Initializing InnerLoop ({self.ui_mode} mode)...")
         
         # Load configuration
         with open(self.config_path, 'r') as f:
@@ -67,9 +71,6 @@ class InnerLoop:
         self.message_bus = MessageBus(
             max_queue_size=self.config['performance']['message_queue_size']
         )
-        
-        # Initialize thought display
-        self.thought_display = ThoughtDisplay(self.config, self.message_bus)
         
         # Initialize memory stores
         self.memory_store = ChromaMemoryStore(
@@ -95,9 +96,6 @@ class InnerLoop:
         for agent_id in ['experiencer', 'stream_generator', 'attention_director']:
             self.message_bus.register_agent(agent_id)
         
-        # Register thought monitor for the display
-        self.message_bus.register_agent('thought_monitor')
-        
         # Create agents
         self.agents['experiencer'] = ExperiencerAgent(
             self.config, self.message_bus, self.memory_store
@@ -111,7 +109,24 @@ class InnerLoop:
             self.config, self.message_bus, self.memory_store
         )
         
-        logger.info("InnerLoop initialized successfully")
+        # Initialize UI based on mode
+        if self.ui_mode == "tui":
+            from ui.innerloop_tui import InnerLoopTUI
+            self.ui_app = InnerLoopTUI(
+                message_bus=self.message_bus,
+                agents=self.agents,
+                config=self.config
+            )
+            # Set memory store reference for metrics
+            self.ui_app.memory_store = self.memory_store
+        else:
+            # CLI mode
+            from ui.thought_display import ThoughtDisplay
+            self.thought_display = ThoughtDisplay(self.config, self.message_bus)
+            # Register thought monitor for the display
+            self.message_bus.register_agent('thought_monitor')
+        
+        logger.info(f"InnerLoop initialized successfully ({self.ui_mode} mode)")
     
     async def _test_ollama_connection(self):
         """Test Ollama connectivity before starting agents."""
@@ -183,24 +198,41 @@ class InnerLoop:
             agent_tasks.append(task)
             logger.info(f"Started {name} agent")
         
-        # Start thought display monitoring
-        await self.thought_display.start_monitoring()
-        
-        # Start monitoring task
-        monitor_task = asyncio.create_task(self._monitor_system())
-        
-        # Start user input handler
-        input_task = asyncio.create_task(self._handle_user_input())
-        
-        # Wait for all tasks
-        try:
-            await asyncio.gather(*agent_tasks, monitor_task, input_task)
-        except KeyboardInterrupt:
-            logger.info("Received interrupt signal")
-        except Exception as e:
-            logger.error("System error", error=str(e))
-        finally:
-            await self.shutdown()
+        if self.ui_mode == "tui":
+            # Give agents a moment to start
+            await asyncio.sleep(1)
+            
+            # Run the TUI app
+            logger.info("Starting TUI interface...")
+            try:
+                await self.ui_app.run_async()
+            except Exception as e:
+                logger.error("TUI error", error=str(e))
+            finally:
+                # Cancel agent tasks
+                for task in agent_tasks:
+                    task.cancel()
+                await self.shutdown()
+        else:
+            # CLI mode
+            # Start thought display monitoring
+            await self.thought_display.start_monitoring()
+            
+            # Start monitoring task
+            monitor_task = asyncio.create_task(self._monitor_system())
+            
+            # Start user input handler
+            input_task = asyncio.create_task(self._handle_user_input())
+            
+            # Wait for all tasks
+            try:
+                await asyncio.gather(*agent_tasks, monitor_task, input_task)
+            except KeyboardInterrupt:
+                logger.info("Received interrupt signal")
+            except Exception as e:
+                logger.error("System error", error=str(e))
+            finally:
+                await self.shutdown()
     
     async def _handle_user_input(self):
         """Handle user input in a simple CLI interface."""
@@ -336,8 +368,8 @@ class InnerLoop:
         logger.info("Shutting down InnerLoop...")
         self.is_running = False
         
-        # Stop thought display
-        if self.thought_display:
+        # Stop UI components
+        if self.ui_mode == "cli" and self.thought_display:
             await self.thought_display.stop_monitoring()
         
         # Stop all agents
@@ -354,10 +386,22 @@ class InnerLoop:
 
 async def main():
     """Main entry point."""
-    print("\n🧠 InnerLoop - AI with Autonomous Initiative")
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="InnerLoop - AI with Autonomous Initiative")
+    parser.add_argument("--ui", choices=["tui", "cli"], default="tui",
+                        help="User interface mode (default: tui)")
+    parser.add_argument("--config", default="config.yaml",
+                        help="Path to configuration file (default: config.yaml)")
+    args = parser.parse_args()
+    
+    # Display banner
+    if args.ui == "tui":
+        print("\n🧠 InnerLoop - AI with Autonomous Initiative (TUI)")
+    else:
+        print("\n🧠 InnerLoop - AI with Autonomous Initiative")
     print("Starting system...\n")
     
-    innerloop = InnerLoop()
+    innerloop = InnerLoop(config_path=args.config, ui_mode=args.ui)
     
     try:
         await innerloop.initialize()

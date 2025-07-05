@@ -13,7 +13,7 @@ InnerLoop is an AI architecture that implements genuine autonomous initiative th
 - Ollama for local LLM inference (gemma3:27b-it-qat model)
 - ChromaDB (in-memory) for semantic memory
 - SQLite for conversation logging
-- Textual for TUI (pending implementation)
+- Textual for TUI (implemented)
 - Pure Python asyncio for concurrency (no Redis, PostgreSQL, or external services)
 
 ## Key Design Decisions
@@ -29,7 +29,7 @@ innerloop/
 ├── memory/              # ChromaDB and SQLite storage
 ├── communication/       # Message bus
 ├── prompts/            # Agent system prompts (markdown files)
-├── ui/                 # Textual TUI (pending)
+├── ui/                 # Textual TUI and CLI display
 ├── config.yaml         # Configuration
 ├── main.py            # Entry point
 └── requirements.txt   # Dependencies
@@ -40,15 +40,16 @@ innerloop/
 - ✅ Async message passing working
 - ✅ Memory systems integrated
 - ✅ Basic CLI interface functional
+- ✅ Multi-panel Textual TUI implemented
 - 🔄 Prompts being moved to separate files
-- 📋 Textual UI pending
 
 ## Running the Project
 ```bash
 # Ensure Python 3.12 and Ollama are installed
 pip install -r requirements.txt
 python test_ollama.py  # Verify Ollama connection
-python main.py         # Start InnerLoop
+python main.py         # Start InnerLoop (TUI mode)
+python main.py --ui cli  # Start InnerLoop (CLI mode)
 ```
 
 ## Important Notes

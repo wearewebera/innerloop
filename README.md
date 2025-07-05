@@ -75,11 +75,17 @@ ollama serve  # In another terminal if not already running
 export OLLAMA_HOST=http://your-ollama-server:11434
 
 # Run the system
-# Option 1: Simple CLI interface
+# Default: Multi-panel TUI (recommended for full visibility)
 python main.py
 
-# Option 2: Multi-panel TUI (recommended for full visibility)
-python main_tui.py
+# Option: Simple CLI interface
+python main.py --ui cli
+
+# Custom configuration file
+python main.py --config custom_config.yaml
+
+# View all options
+python main.py --help
 ```
 
 ## 📁 Project Structure
@@ -174,7 +180,7 @@ When running InnerLoop, watch for these emergent behaviors:
 
 InnerLoop offers two interfaces:
 
-#### Simple CLI (main.py)
+#### Simple CLI Mode (`python main.py --ui cli`)
 Shows filtered thoughts inline with conversation:
 ```
 [🔗 Association (0.65)]: This reminds me of neural networks...
@@ -188,43 +194,50 @@ You: What interests you most about AI?
 Alex: I find myself constantly drawn to questions about consciousness...
 ```
 
-#### Multi-Panel TUI (main_tui.py) - Recommended
-Shows ALL agent activity in real-time across three panels:
+#### Multi-Panel TUI Mode (`python main.py`) - Default & Recommended
+Shows ALL agent activity in real-time across four panels:
 
 ```
-┌─────────────────────────────────┬─────────────────────────────────┐
-│        Stream Generator         │       Attention Director        │
-│ ─────────────────────────────── │ ─────────────────────────────── │
-│ [12:34:15] 🤔 Wonder (0.25)     │ [12:34:15] Evaluating...        │
-│ I wonder about the nature of... │ Priority: 0.25 < 0.3 threshold │
-│                                 │ Decision: ✗ FILTERED OUT        │
-│ [12:34:18] 💭 Memory (0.65)     │                                 │
-│ Remember our discussion about.. │ [12:34:18] Evaluating...        │
-│                                 │ Priority: 0.65 > 0.3 threshold │
-│ [12:34:21] 🔗 Association (0.45)│ Decision: ✓ PASS TO EXPERIENCER │
-│ This connects to emergence...   │ Relevance: 0.7, Novelty: 0.4   │
-└─────────────────────────────────┴─────────────────────────────────┘
-┌───────────────────────────────────────────────────────────────────┐
-│                    Main Conversation (Experiencer)                │
-│ ───────────────────────────────────────────────────────────────── │
-│ You: What do you think about consciousness?                      │
-│                                                                   │
-│ [Internal: Integrating high-priority insight about consciousness] │
-│                                                                   │
-│ Alex: That's fascinating! I was just having an insight...        │
-└───────────────────────────────────────────────────────────────────┘
-[Status: Active] [Thoughts/min: 3.2] [Filtered: 45%] [Memory: 142]
+┌─────────────────────────┬─────────────────────────┬─────────────────────────┐
+│   Stream Generator      │   Attention Director    │  Internal Processing    │
+│ ────────────────────── │ ────────────────────── │ ────────────────────── │
+│ [12:34:15] 🤔 Wonder   │ [12:34:15] Evaluating.. │ 💭 Processing user      │
+│ I wonder about the     │ Priority: 0.25 < 0.3    │ query about conscious-  │
+│ nature of...           │ Decision: ✗ FILTERED    │ ness...                 │
+│                        │                         │                         │
+│ [12:34:18] 💭 Memory   │ [12:34:18] Evaluating.. │ 💭 Integrating high-    │
+│ Remember our discuss-  │ Priority: 0.65 > 0.3    │ priority insight...     │
+│ ion about emergence... │ Decision: ✓ PASS        │                         │
+│                        │ Relevance: 0.7          │ 💭 Recalling previous   │
+│ [12:34:21] 🔗 Assoc.   │                         │ conversation about      │
+│ This connects to...    │ [12:34:21] Evaluating.. │ emergent properties...  │
+└─────────────────────────┴─────────────────────────┴─────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Main Conversation                              │
+│ ─────────────────────────────────────────────────────────────────────────── │
+│ You: What do you think about consciousness?                                │
+│                                                                             │
+│ Alex: That's fascinating! I was just having an insight about how           │
+│ consciousness might emerge from simple rules, similar to how complex        │
+│ patterns arise in neural networks...                                        │
+│                                                                             │
+│ You: _                                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+[Status: Active] [Thoughts/min: 3.2] [Filtered: 45%] [Memory: 142] [Uptime: 00:05:23]
 ```
 
 **TUI Features:**
 - **Stream Generator Panel**: Shows ALL thoughts (even low priority)
 - **Attention Director Panel**: Shows filtering decisions and scores
-- **Conversation Panel**: Clean conversation without interruptions
+- **Conversation Panel**: Clean conversation between user and Alex
+- **Internal Processing Panel**: Shows internal thoughts and processing
 - **Status Bar**: Real-time metrics
 - **Keyboard Shortcuts**: 
   - `Ctrl+C`: Quit
   - `Ctrl+L`: Clear all panels
-  - `F1/F2`: Toggle panels
+  - `F1`: Toggle Stream Generator panel
+  - `F2`: Toggle Attention Director panel
+  - `F3`: Toggle Internal Processing panel
 
 ## 📊 System Monitoring
 
@@ -243,13 +256,15 @@ View logs in real-time to see the inner workings of the tri-agent system.
 - Async message passing system
 - In-memory ChromaDB integration
 - SQLite conversation logging
-- Basic CLI interface
+- Multi-panel TUI with Textual
+- Simple CLI interface
 - Autonomous thought generation
+- Command-line UI mode selection
 
 ### 🔄 In Progress
-- Textual-based TUI with agent panels
 - Enhanced memory consolidation
 - Performance optimizations
+- Prompt externalization to files
 
 ### 📋 Planned Features
 - MCP integration for external tools
