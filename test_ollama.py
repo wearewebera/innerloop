@@ -3,6 +3,7 @@
 
 import asyncio
 import os
+import yaml
 from ollama import AsyncClient
 
 async def test_ollama():
@@ -50,8 +51,16 @@ async def test_ollama():
         else:
             print("\nNo models found or unable to parse model list")
         
-        # Test generation with model if available
-        model_name = "gemma3:27b-it-qat"
+        # Load model from config
+        try:
+            with open('config.yaml', 'r') as f:
+                config = yaml.safe_load(f)
+            model_name = config['model']['name']
+            thinking_enabled = config['model'].get('thinking', {}).get('enabled', False)
+        except:
+            model_name = "deepseek-r1:14b"  # Default
+            thinking_enabled = False
+        
         model_found = False
         
         # Check if the model exists
@@ -64,7 +73,10 @@ async def test_ollama():
         
         if model_found:
             print(f"\nTesting generation with {model_name}...")
+            if thinking_enabled:
+                print("Thinking mode is ENABLED")
             
+            # Basic generation test
             response = await client.chat(
                 model=model_name,
                 messages=[
@@ -74,6 +86,28 @@ async def test_ollama():
             )
             
             print(f"Response: {response['message']['content']}")
+            
+            # Test thinking mode if enabled
+            if thinking_enabled:
+                print(f"\nTesting thinking mode...")
+                try:
+                    thinking_response = await client.chat(
+                        model=model_name,
+                        messages=[
+                            {"role": "user", "content": "What is 15 + 27? Think step by step."}
+                        ],
+                        think=True
+                    )
+                    
+                    if 'thinking' in thinking_response.get('message', {}):
+                        print("✓ Thinking mode works!")
+                        print(f"Thinking preview: {thinking_response['message']['thinking'][:100]}...")
+                        print(f"Answer: {thinking_response['message']['content']}")
+                    else:
+                        print("⚠️ Thinking not found in response")
+                except Exception as e:
+                    print(f"⚠️ Thinking mode test failed: {e}")
+            
             print("\n✓ Ollama is working correctly!")
         else:
             print(f"\n⚠️  Model {model_name} not found. Please run: ollama pull {model_name}")

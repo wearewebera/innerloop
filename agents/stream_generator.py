@@ -21,12 +21,33 @@ class StreamGeneratorAgent(BaseAgent):
         super().__init__("stream_generator", config, message_bus, memory_store)
         
         # Stream generation settings
-        self.thoughts_per_minute = self.agent_config.get('thoughts_per_minute', 3)
+        self.base_thoughts_per_minute = self.agent_config.get('thoughts_per_minute', 1)
+        self.thoughts_per_minute = self.base_thoughts_per_minute
         self.context_window = self.agent_config.get('context_window', 10)
         self.creativity_boost = self.agent_config.get('creativity_boost', 0.2)
         
+        # Adaptive frequency settings
+        self.adaptive_config = self.agent_config.get('adaptive_frequency', {})
+        self.adaptive_enabled = self.adaptive_config.get('enabled', True)
+        self.conversation_active_multiplier = self.adaptive_config.get('conversation_active_multiplier', 0.5)
+        self.idle_multiplier = self.adaptive_config.get('idle_multiplier', 1.5)
+        self.min_thoughts_per_minute = self.adaptive_config.get('min_thoughts_per_minute', 0.3)
+        self.max_thoughts_per_minute = self.adaptive_config.get('max_thoughts_per_minute', 2.0)
+        
+        # Conversation awareness settings
+        self.conversation_config = self.agent_config.get('conversation_awareness', {})
+        self.conversation_awareness_enabled = self.conversation_config.get('enabled', True)
+        self.influence_strength = self.conversation_config.get('influence_strength', 0.25)
+        self.theme_update_interval = self.conversation_config.get('update_interval', 45)
+        
         # Thought generation state
         self.recent_thoughts = []
+        self.conversation_themes = []  # Abstract themes from conversations
+        self.focus_areas = []  # Current focus areas from attention director
+        self.last_conversation_time = datetime.now()
+        self.last_theme_update = datetime.now()
+        self.conversation_active = False
+        
         self.thought_patterns = [
             "association",
             "memory",
@@ -36,6 +57,10 @@ class StreamGeneratorAgent(BaseAgent):
             "insight"
         ]
         
+        # Add contextual drift as a new thought type when conversation aware
+        if self.conversation_awareness_enabled:
+            self.thought_patterns.append("contextual_drift")
+        
         # Timing
         self.last_thought_time = datetime.now()
         self.thought_interval = 60.0 / self.thoughts_per_minute
@@ -43,10 +68,25 @@ class StreamGeneratorAgent(BaseAgent):
     async def _initialize(self):
         """Initialize the Stream Generator."""
         self.logger.info("Stream Generator initializing",
-                        thoughts_per_minute=self.thoughts_per_minute)
+                        base_thoughts_per_minute=self.base_thoughts_per_minute,
+                        adaptive_enabled=self.adaptive_enabled,
+                        conversation_awareness=self.conversation_awareness_enabled)
         
         # Subscribe to external inputs to trigger associations
         self.message_bus.subscribe(self.agent_id, "external_input")
+        
+        # Subscribe to conversation themes if awareness is enabled
+        if self.conversation_awareness_enabled:
+            self.message_bus.subscribe(self.agent_id, "conversation_themes")
+            self.logger.info("Subscribed to conversation themes")
+        
+        # Subscribe to conversation activity signals
+        self.message_bus.subscribe(self.agent_id, "conversation_activity")
+        
+        # Subscribe to focus emergence signals
+        self.message_bus.subscribe(self.agent_id, "focus_emergence")
+        self.message_bus.subscribe(self.agent_id, "focus_shift")
+        
         
         # Load some initial memories to seed thoughts
         initial_memories = await self.retrieve_memories("", limit=20)
@@ -64,9 +104,26 @@ class StreamGeneratorAgent(BaseAgent):
                 for message in messages:
                     await self._process_message(message)
                 
+                # Update adaptive frequency if enabled
+                if self.adaptive_enabled:
+                    self._update_adaptive_frequency()
+                
                 # Generate thought if it's time
                 now = datetime.now()
-                if (now - self.last_thought_time).total_seconds() >= self.thought_interval:
+                time_since_last = (now - self.last_thought_time).total_seconds()
+                
+                # Log timing info periodically
+                if int(time_since_last) % 30 == 0 and int(time_since_last) > 0:
+                    self.logger.info("Stream Generator timing check",
+                                   time_since_last_thought=time_since_last,
+                                   thought_interval=self.thought_interval,
+                                   thoughts_per_minute=self.thoughts_per_minute,
+                                   conversation_active=self.conversation_active)
+                
+                if time_since_last >= self.thought_interval:
+                    self.logger.info("Generating thought",
+                                   time_since_last=time_since_last,
+                                   interval=self.thought_interval)
                     await self._generate_thought()
                     self.last_thought_time = now
                 
@@ -74,12 +131,38 @@ class StreamGeneratorAgent(BaseAgent):
                 await asyncio.sleep(0.5)
                 
             except Exception as e:
-                self.logger.error("Stream generation error", error=str(e))
+                self.logger.error("Stream generation error", error=str(e), exc_info=True)
                 await asyncio.sleep(1)
     
     async def _generate_thought(self):
         """Generate an autonomous thought."""
-        thought_type = random.choice(self.thought_patterns)
+        self.logger.debug("Starting thought generation",
+                         thought_patterns=self.thought_patterns,
+                         focus_areas_count=len(self.focus_areas),
+                         conversation_themes_count=len(self.conversation_themes))
+        
+        # Adjust thought type probabilities based on focus areas and conversation awareness
+        weights = [1.0] * len(self.thought_patterns)
+        
+        # If we have focus areas, strongly prefer related thoughts
+        if self.focus_areas:
+            # Boost association and observation for focus-related insights
+            if "association" in self.thought_patterns:
+                weights[self.thought_patterns.index("association")] = 3.0
+            if "observation" in self.thought_patterns:
+                weights[self.thought_patterns.index("observation")] = 2.5
+            if "reflection" in self.thought_patterns:
+                weights[self.thought_patterns.index("reflection")] = 2.0
+        
+        # Also consider conversation themes
+        elif self.conversation_awareness_enabled and self.conversation_themes:
+            # Increase chance of contextual thoughts when themes are available
+            if "contextual_drift" in self.thought_patterns:
+                drift_idx = self.thought_patterns.index("contextual_drift")
+                weights[drift_idx] = 2.0 * self.influence_strength
+        
+        thought_type = random.choices(self.thought_patterns, weights=weights)[0]
+        self.logger.debug("Selected thought type", type=thought_type, weights=weights)
         
         try:
             if thought_type == "association":
@@ -94,6 +177,8 @@ class StreamGeneratorAgent(BaseAgent):
                 thought = await self._generate_reflection()
             elif thought_type == "insight":
                 thought = await self._generate_insight()
+            elif thought_type == "contextual_drift":
+                thought = await self._generate_contextual_drift()
             else:
                 thought = None
             
@@ -134,33 +219,80 @@ class StreamGeneratorAgent(BaseAgent):
                     }
                 )
                 
-                self.logger.debug("Generated thought", 
+                self.logger.info("Generated thought successfully", 
                                 type=thought_type,
+                                priority=thought.get('priority', 0.3),
                                 preview=thought['content'][:50])
+            else:
+                self.logger.debug("Thought type returned None, trying fallback", type=thought_type)
+                # If insight or memory returned None, fall back to association
+                if thought_type in ["insight", "memory"] and "association" in self.thought_patterns:
+                    thought = await self._generate_association()
+                    if thought:
+                        # Send the fallback thought
+                        await self.send_message(
+                            "attention_director",
+                            thought['content'],
+                            message_type="thought",
+                            priority=thought.get('priority', 0.3),
+                            metadata={
+                                "type": "association",
+                                "trigger": "fallback",
+                                "original_type": thought_type
+                            }
+                        )
+                        self.logger.info("Generated fallback thought", 
+                                       original_type=thought_type,
+                                       fallback_type="association",
+                                       priority=thought.get('priority', 0.3))
                 
         except Exception as e:
             self.logger.error("Thought generation failed", 
                             type=thought_type,
-                            error=str(e))
+                            error=str(e),
+                            exc_info=True)
     
     async def _generate_association(self) -> Dict[str, Any]:
-        """Generate an associative thought."""
+        """Generate an associative thought with optional deeper reasoning."""
         # Get recent context
         recent_context = self._get_recent_context()
         
-        prompt = (
-            "Generate a brief associative thought that connects to recent topics or memories. "
-            "Be creative and make unexpected connections. Keep it under 50 words."
-        )
+        # Check if we have focus areas
+        if self.focus_areas:
+            focus = random.choice(self.focus_areas)
+            prompt = (
+                f"Generate a brief associative thought related to '{focus['theme']}'. "
+                "Make creative connections while staying relevant to this focus area. "
+                "Keep it under 50 words."
+            )
+            priority_boost = 0.2
+            use_thinking = True  # Use thinking for focused associations
+        else:
+            prompt = (
+                "Generate a brief associative thought that connects to recent topics or memories. "
+                "Be creative and make unexpected connections. Keep it under 50 words."
+            )
+            priority_boost = 0.0
+            use_thinking = False
         
         if recent_context:
             prompt += f"\nRecent context: {recent_context}"
         
-        content = await self.generate_response(prompt)
+        # Use thinking mode for deeper associations when focused
+        if use_thinking and self.model_config.get('thinking', {}).get('enabled', False):
+            result = await self.think_and_respond(prompt)
+            content = result['response']
+            
+            # Log thinking process if particularly insightful
+            if result.get('thinking') and len(result['thinking']) > 100:
+                self.logger.debug("Deep association thinking", 
+                                preview=result['thinking'][:100])
+        else:
+            content = await self.generate_response(prompt)
         
         return {
             "content": content,
-            "priority": random.uniform(0.2, 0.6)
+            "priority": random.uniform(0.2 + priority_boost, 0.6 + priority_boost)
         }
     
     async def _generate_memory_recall(self) -> Dict[str, Any]:
@@ -261,27 +393,85 @@ class StreamGeneratorAgent(BaseAgent):
         }
     
     async def _generate_insight(self) -> Dict[str, Any]:
-        """Generate an insightful realization."""
+        """Generate an insightful realization using deeper reasoning."""
         # Insights are rarer and higher priority
         if random.random() > 0.7:  # 30% chance
             prompt = (
                 "Generate a brief but profound insight or realization. "
                 "It should feel like a sudden understanding or 'aha' moment. "
+                "Connect disparate ideas in a meaningful way. "
                 "Keep it under 40 words."
             )
             
-            content = await self.generate_response(prompt)
+            # Always use thinking for insights
+            if self.model_config.get('thinking', {}).get('enabled', False):
+                result = await self.think_and_respond(prompt)
+                content = result['response']
+                
+                # Log exceptional insights
+                if result.get('thinking'):
+                    self.logger.info("Insight generation with reasoning",
+                                   thinking_preview=result['thinking'][:150])
+                    
+                    # Boost priority for well-reasoned insights
+                    thinking_length = len(result['thinking'])
+                    priority_boost = min(0.1, thinking_length / 1000)  # Up to 0.1 boost
+                else:
+                    priority_boost = 0
+            else:
+                content = await self.generate_response(prompt)
+                priority_boost = 0
             
             return {
                 "content": f"💡 {content}",
-                "priority": random.uniform(0.7, 0.95)
+                "priority": random.uniform(0.7 + priority_boost, 0.95)
             }
         
+        # Return None if insight not generated (70% of the time)
+        self.logger.debug("Insight generation skipped (random chance)")
         return None
     
     async def _process_message(self, message):
         """Process incoming messages and potentially trigger associations."""
-        if message.message_type == "external" and message.priority >= 0.8:
+        # Handle conversation activity signals
+        if message.message_type == "conversation_activity":
+            self.conversation_active = message.metadata.get('active', False)
+            self.last_conversation_time = datetime.now()
+            self.logger.debug("Conversation activity updated", active=self.conversation_active)
+        
+        # Handle conversation themes
+        elif message.message_type == "conversation_themes" and self.conversation_awareness_enabled:
+            themes = message.metadata.get('themes', [])
+            if themes:
+                self.conversation_themes = themes
+                self.last_theme_update = datetime.now()
+                self.logger.debug("Updated conversation themes", count=len(themes))
+        
+        # Handle focus emergence
+        elif message.message_type == "focus_emergence":
+            theme = message.metadata.get('theme', '')
+            keywords = message.metadata.get('keywords', [])
+            if theme:
+                self.focus_areas.append({
+                    'theme': theme,
+                    'keywords': keywords,
+                    'emerged_at': datetime.now()
+                })
+                self.logger.info("New focus area registered", theme=theme)
+                # Generate immediate thought about the new focus
+                await self._generate_focus_acknowledgment(theme)
+        
+        # Handle focus shifts
+        elif message.message_type == "focus_shift":
+            action = message.metadata.get('action')
+            theme = message.metadata.get('theme', '')
+            if action == 'fade' and theme:
+                self.focus_areas = [f for f in self.focus_areas if f['theme'] != theme]
+                self.logger.debug("Focus area removed", theme=theme)
+        
+        
+        # Handle high-priority external inputs
+        elif message.message_type == "external" and message.priority >= 0.8:
             # High priority external input - trigger immediate association
             self.logger.debug("External input triggered association")
             
@@ -311,10 +501,122 @@ class StreamGeneratorAgent(BaseAgent):
         recent = self.recent_thoughts[-3:]
         return " | ".join([t['content'][:50] for t in recent])
     
+    def _update_adaptive_frequency(self):
+        """Update thought generation frequency based on conversation state."""
+        if not self.adaptive_enabled:
+            return
+        
+        now = datetime.now()
+        time_since_conversation = (now - self.last_conversation_time).total_seconds()
+        
+        # Determine if we're in active conversation or idle
+        if self.conversation_active or time_since_conversation < 60:
+            # Active conversation - reduce frequency
+            self.thoughts_per_minute = self.base_thoughts_per_minute * self.conversation_active_multiplier
+        elif time_since_conversation > 300:  # 5 minutes idle
+            # Idle state - increase frequency
+            self.thoughts_per_minute = self.base_thoughts_per_minute * self.idle_multiplier
+        else:
+            # Normal state
+            self.thoughts_per_minute = self.base_thoughts_per_minute
+        
+        # Apply min/max limits
+        self.thoughts_per_minute = max(self.min_thoughts_per_minute, 
+                                      min(self.max_thoughts_per_minute, self.thoughts_per_minute))
+        
+        # Update interval
+        self.thought_interval = 60.0 / self.thoughts_per_minute
+    
+    async def _generate_contextual_drift(self) -> Dict[str, Any]:
+        """Generate a thought inspired by conversation themes but maintaining autonomy."""
+        if not self.conversation_themes:
+            # Fall back to association if no themes
+            return await self._generate_association()
+        
+        # Pick a random theme and drift from it
+        theme = random.choice(self.conversation_themes)
+        
+        prompt = (
+            f"Generate a tangentially related thought that drifts from the theme '{theme}'. "
+            "The thought should be inspired by but not directly about the theme. "
+            "Make it feel like a natural wandering of mind. Keep it under 50 words."
+        )
+        
+        # Add some randomness to maintain autonomy
+        if random.random() < 0.3:
+            prompt += " Feel free to connect it to something completely unexpected."
+        
+        content = await self.generate_response(prompt)
+        
+        return {
+            "content": content,
+            "priority": random.uniform(0.3, 0.6),
+            "metadata": {
+                "inspired_by": theme,
+                "autonomy_score": 1.0 - self.influence_strength
+            }
+        }
+    
+    
+    async def _generate_focus_acknowledgment(self, theme: str):
+        """Generate an immediate thought acknowledging a new focus area with reasoning."""
+        prompt = (
+            f"A new area of focus has emerged: '{theme}'. "
+            "Generate a brief thought that shows curiosity or interest in exploring this topic. "
+            "Consider why this theme might be meaningful or worth exploring. "
+            "Keep it natural and under 40 words."
+        )
+        
+        try:
+            # Use thinking mode for focus acknowledgments to understand why it matters
+            if self.model_config.get('thinking', {}).get('enabled', False):
+                result = await self.think_and_respond(prompt)
+                content = result['response']
+                
+                # Include reasoning in metadata
+                metadata = {
+                    "type": "focus_acknowledgment",
+                    "trigger": "focus_emergence",
+                    "theme": theme
+                }
+                
+                if result.get('thinking'):
+                    metadata['reasoning'] = result['thinking'][:200]
+                    self.logger.debug("Focus acknowledgment reasoning",
+                                    theme=theme,
+                                    reasoning_preview=result['thinking'][:100])
+            else:
+                content = await self.generate_response(prompt)
+                metadata = {
+                    "type": "focus_acknowledgment",
+                    "trigger": "focus_emergence",
+                    "theme": theme
+                }
+            
+            # Send with high priority to ensure it's noticed
+            await self.send_message(
+                "attention_director",
+                content,
+                message_type="thought",
+                priority=0.7,
+                metadata=metadata
+            )
+            
+            self.logger.info("Generated focus acknowledgment", theme=theme)
+            
+        except Exception as e:
+            self.logger.error("Failed to generate focus acknowledgment", 
+                            theme=theme, error=str(e))
+    
     async def _cleanup(self):
         """Clean up resources."""
         self.logger.info("Stream Generator shutting down")
         self.message_bus.unsubscribe(self.agent_id, "external_input")
+        if self.conversation_awareness_enabled:
+            self.message_bus.unsubscribe(self.agent_id, "conversation_themes")
+        self.message_bus.unsubscribe(self.agent_id, "conversation_activity")
+        self.message_bus.unsubscribe(self.agent_id, "focus_emergence")
+        self.message_bus.unsubscribe(self.agent_id, "focus_shift")
     
     def get_status(self) -> Dict[str, Any]:
         """Get current agent status."""

@@ -4,10 +4,16 @@
 # ollama_host: "http://localhost:11434"
 
 model:
-  name: "gemma3:27b-it-qat"          # Ollama model to use
+  name: "deepseek-r1:14b"    # DeepSeek reasoning model (14B parameters)
   temperature: 0.7           # Creativity level (0.0-1.0)
   max_tokens: 512            # Maximum response length
-  timeout: 30                # Seconds to wait for response
+  timeout: 45                # Seconds to wait for response (increased for 14B)
+  # Thinking model settings
+  thinking:
+    enabled: true            # Enable thinking/reasoning mode
+    display_thinking: true   # Show thinking in UI
+    think_temperature: 0.9   # Higher temperature for creative thinking
+    max_thinking_tokens: 1024 # Longer thinking allowed
 
 agents:
   shared_identity:
@@ -33,9 +39,23 @@ agents:
   
   stream_generator:
     role: "background thought generator"  
-    thoughts_per_minute: 3
+    thoughts_per_minute: 1    # Reduced from 3 - one thought per minute
     context_window: 10        # Number of recent memories to consider
     creativity_boost: 0.2     # Additional temperature for variety
+    # Adaptive frequency settings
+    adaptive_frequency:
+      enabled: true
+      conversation_active_multiplier: 0.5  # Half rate during active conversation
+      idle_multiplier: 1.5                 # 1.5x rate when idle for 5+ minutes
+      min_thoughts_per_minute: 0.3         # Never go below 1 thought per 3 minutes
+      max_thoughts_per_minute: 2.0         # Never exceed 2 thoughts per minute
+    # Conversation awareness settings
+    conversation_awareness:
+      enabled: true
+      influence_strength: 0.25   # How much conversations affect thought generation (0-1)
+      update_interval: 45        # Seconds between conversation theme updates
+      theme_extraction: true     # Extract abstract themes vs raw content
+      maintain_autonomy: true    # Ensure thoughts remain independent
   
   attention_director:
     role: "attention and priority manager"
@@ -89,3 +109,26 @@ performance:
   memory_cache_size: 100
   ollama_retry_attempts: 3
   ollama_retry_delay: 1      # seconds
+
+# Organic focus emergence settings
+focus:
+  persistence_threshold: 180   # Seconds a theme needs attention before becoming focus (3 min)
+  decay_rate: 0.85            # How fast focus decays without reinforcement per minute
+  multi_focus_limit: 2        # Maximum simultaneous focus areas
+  clustering_threshold: 0.7   # Semantic similarity threshold for theme clustering
+  min_priority_for_focus: 0.6 # Minimum thought priority to contribute to focus emergence
+
+# Tool calling configuration
+tools:
+  enabled: true               # Enable tool calling capabilities
+  max_parallel_calls: 3       # Maximum parallel tool executions
+  timeout: 10                 # Tool execution timeout in seconds
+  retry_attempts: 2           # Retry failed tool calls
+  # Available tools configuration
+  available_tools:
+    - memory_search          # Deep memory searches
+    - focus_analysis         # Analyze focus areas
+    - decision_maker         # Make autonomous decisions
+    - reflection             # Self-reflection capabilities
+    - time_awareness         # Current time/date
+    - web_search             # External information (optional)

@@ -171,14 +171,23 @@ class InternalProcessingPanel(RichLog):
         super().__init__(wrap=True, highlight=True, markup=True, max_lines=500, auto_scroll=True)
         self.border_title = "Internal Processing"
         
-    def add_internal_thought(self, content: str):
+    def add_internal_thought(self, content: str, thought_type: str = "thought"):
         """Add an internal thought or processing message."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         
         thought_text = Text()
         thought_text.append(f"[{timestamp}] ", style="dim")
-        thought_text.append("💭 ", style="magenta")
-        thought_text.append(content, style="italic magenta")
+        
+        if thought_type == "thinking":
+            thought_text.append("🧠 Reasoning: ", style="bold yellow")
+            thought_text.append(content, style="italic yellow")
+        elif thought_type == "tool_call":
+            thought_text.append("🔧 Tool: ", style="bold cyan")
+            thought_text.append(content, style="cyan")
+        else:
+            thought_text.append("💭 ", style="magenta")
+            thought_text.append(content, style="italic magenta")
+            
         thought_text.append("\n")
         
         self.write(thought_text)
@@ -310,6 +319,9 @@ class InnerLoopTUI(App):
         if self.agents and 'experiencer' in self.agents:
             self.conversation_panel.input_callback = self._handle_user_input
             
+            # Set up spontaneous share callback
+            self.agents['experiencer'].spontaneous_share_callback = self._handle_spontaneous_share
+            
         # Start monitoring tasks
         self.monitor_task = asyncio.create_task(self._monitor_agents())
         self.update_task = asyncio.create_task(self._update_panels())
@@ -318,7 +330,7 @@ class InnerLoopTUI(App):
         # Welcome message
         self.conversation_panel.add_message(
             "System", 
-            f"InnerLoop AI - Multi-Panel Interface\nHello! I'm {self.config.get('agents', {}).get('shared_identity', {}).get('name', 'Alex')}."
+            f"InnerLoop AI - Multi-Panel Interface\nHello! I'm {self.config.get('agents', {}).get('shared_identity', {}).get('name', 'Alex')}.\nThinking model: {self.config.get('model', {}).get('name', 'unknown')}"
         )
     
     async def _handle_user_input(self, user_input: str):
@@ -351,6 +363,11 @@ class InnerLoopTUI(App):
                     self.conversation_panel.add_message("Alex", response_text)
             except asyncio.TimeoutError:
                 self.conversation_panel.add_message("System", "[Response timeout]")
+    
+    async def _handle_spontaneous_share(self, thought: str):
+        """Handle spontaneous thought sharing from Experiencer."""
+        # Add as a special type of message
+        self.conversation_panel.add_message("Alex", thought, is_thought=True)
     
     async def _monitor_agents(self):
         """Monitor message bus for agent activity."""
@@ -392,8 +409,28 @@ class InnerLoopTUI(App):
                             
                     elif msg.message_type == "internal_state":
                         # Internal processing from experiencer - route to internal panel
+                        thought_type = msg.metadata.get('type', 'thought')
+                        content = msg.content
+                        
+                        # Handle full thinking if available
+                        if thought_type == "thinking" and msg.metadata.get('full_thinking'):
+                            # Show truncated thinking with indicator
+                            full_thinking = msg.metadata.get('full_thinking', '')
+                            if len(full_thinking) > 200:
+                                content = f"{full_thinking[:200]}... [truncated, {len(full_thinking)} chars total]"
+                            else:
+                                content = full_thinking
+                        
                         await self.internal_queue.put({
-                            'content': msg.content
+                            'content': content,
+                            'type': thought_type
+                        })
+                    
+                    elif msg.message_type == "tool_call":
+                        # Tool execution messages
+                        await self.internal_queue.put({
+                            'content': f"Executing {msg.metadata.get('tool_name', 'unknown')}: {msg.content}",
+                            'type': 'tool_call'
                         })
                         
             except asyncio.TimeoutError:
@@ -434,7 +471,10 @@ class InnerLoopTUI(App):
                 # Update internal processing panel
                 try:
                     internal_data = await asyncio.wait_for(self.internal_queue.get(), timeout=0.01)
-                    self.internal_panel.add_internal_thought(internal_data['content'])
+                    self.internal_panel.add_internal_thought(
+                        internal_data['content'],
+                        internal_data.get('type', 'thought')
+                    )
                 except asyncio.TimeoutError:
                     pass
                     

@@ -89,6 +89,7 @@ class InnerLoop:
         # Test Ollama connectivity before initializing agents
         await self._test_ollama_connection()
         
+        
         # Initialize agents
         logger.info("Initializing agents...")
         

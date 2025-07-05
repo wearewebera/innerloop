@@ -55,6 +55,10 @@ class BaseAgent(ABC):
         self.message_count = 0
         self.last_activity = datetime.now()
         
+        # Thinking and tool state
+        self.last_thinking = None
+        self.tool_registry = None  # Will be set by agents that use tools
+        
         # Logger with agent context (create early so _build_system_prompt can use it)
         self.logger = logger.bind(agent=agent_id)
         
@@ -108,6 +112,7 @@ class BaseAgent(ABC):
         
         return full_prompt
     
+    
     async def start(self):
         """Start the agent's main loop."""
         self.is_running = True
@@ -143,8 +148,9 @@ class BaseAgent(ABC):
         """Clean up agent-specific resources."""
         pass
     
-    async def generate_response(self, prompt: str, context: List[Dict[str, str]] = None) -> str:
-        """Generate a response using Ollama."""
+    async def generate_response(self, prompt: str, context: List[Dict[str, str]] = None, 
+                              use_thinking: bool = None, tools: List[Dict] = None) -> str:
+        """Generate a response using Ollama with optional thinking mode."""
         messages = [{"role": "system", "content": self.system_prompt}]
         
         if context:
@@ -152,15 +158,51 @@ class BaseAgent(ABC):
         
         messages.append({"role": "user", "content": prompt})
         
+        # Determine if thinking should be used
+        if use_thinking is None:
+            use_thinking = self.model_config.get('thinking', {}).get('enabled', False)
+        
         try:
-            response = await self.ollama.chat(
-                model=self.model_config['name'],
-                messages=messages,
-                options={
+            chat_params = {
+                "model": self.model_config['name'],
+                "messages": messages,
+                "options": {
                     "temperature": self.model_config['temperature'],
                     "num_predict": self.model_config['max_tokens'],
                 }
-            )
+            }
+            
+            # Add thinking parameter if supported
+            if use_thinking:
+                chat_params["think"] = True
+                # Use thinking-specific temperature if configured
+                if 'thinking' in self.model_config:
+                    chat_params["options"]["temperature"] = self.model_config['thinking'].get(
+                        'think_temperature', self.model_config['temperature']
+                    )
+            
+            # Add tools if provided
+            if tools and self.config.get('tools', {}).get('enabled', False):
+                chat_params["tools"] = tools
+            
+            response = await self.ollama.chat(**chat_params)
+            
+            # Handle thinking response
+            if use_thinking and 'thinking' in response.get('message', {}):
+                self.last_thinking = response['message']['thinking']
+                self.logger.debug("Thinking process captured", 
+                                thinking_length=len(self.last_thinking))
+                
+                # Optionally log thinking for debugging
+                if self.model_config.get('thinking', {}).get('log_thinking', False):
+                    self.logger.info("Agent thinking", thinking=self.last_thinking[:200] + "...")
+            
+            # Handle tool calls if present
+            if 'tool_calls' in response.get('message', {}):
+                tool_results = await self._execute_tools(response['message']['tool_calls'])
+                # For now, return a summary of tool executions
+                # In a full implementation, we'd continue the conversation with tool results
+                return f"[Executed tools: {', '.join(t['function']['name'] for t in response['message']['tool_calls'])}]\n{response['message']['content']}"
             
             return response['message']['content']
             
@@ -216,6 +258,84 @@ class BaseAgent(ABC):
             agent_id=self.agent_id
         )
     
+    async def _execute_tools(self, tool_calls: List[Dict]) -> List[Dict]:
+        """Execute tool calls and return results."""
+        if not self.tool_registry:
+            self.logger.warning("Tool registry not initialized")
+            return []
+        
+        results = []
+        for tool_call in tool_calls:
+            try:
+                tool_name = tool_call['function']['name']
+                tool_args = tool_call['function'].get('arguments', {})
+                
+                if self.tool_registry.has_tool(tool_name):
+                    result = await self.tool_registry.execute_tool(tool_name, tool_args)
+                    results.append({
+                        'tool_name': tool_name,
+                        'result': result,
+                        'success': True
+                    })
+                else:
+                    self.logger.warning(f"Tool not found: {tool_name}")
+                    results.append({
+                        'tool_name': tool_name,
+                        'error': f"Tool '{tool_name}' not found",
+                        'success': False
+                    })
+                    
+            except Exception as e:
+                self.logger.error(f"Tool execution failed", 
+                                tool=tool_call['function']['name'],
+                                error=str(e))
+                results.append({
+                    'tool_name': tool_call['function']['name'],
+                    'error': str(e),
+                    'success': False
+                })
+        
+        return results
+    
+    async def think_and_respond(self, prompt: str, context: List[Dict[str, str]] = None) -> Dict[str, str]:
+        """Generate a response with thinking exposed separately."""
+        messages = [{"role": "system", "content": self.system_prompt}]
+        
+        if context:
+            messages.extend(context)
+        
+        messages.append({"role": "user", "content": prompt})
+        
+        try:
+            response = await self.ollama.chat(
+                model=self.model_config['name'],
+                messages=messages,
+                think=True,  # Always use thinking for this method
+                options={
+                    "temperature": self.model_config.get('thinking', {}).get(
+                        'think_temperature', self.model_config['temperature']
+                    ),
+                    "num_predict": self.model_config.get('thinking', {}).get(
+                        'max_thinking_tokens', self.model_config['max_tokens']
+                    ),
+                }
+            )
+            
+            thinking = response['message'].get('thinking', '')
+            content = response['message'].get('content', '')
+            
+            # Store thinking for later reference
+            self.last_thinking = thinking
+            
+            return {
+                'thinking': thinking,
+                'response': content
+            }
+            
+        except Exception as e:
+            self.logger.error("Thinking generation failed", error=str(e))
+            raise
+    
     def get_metrics(self) -> Dict[str, Any]:
         """Get agent metrics for monitoring."""
         return {
@@ -223,5 +343,7 @@ class BaseAgent(ABC):
             "is_running": self.is_running,
             "message_count": self.message_count,
             "last_activity": self.last_activity.isoformat(),
-            "uptime": (datetime.now() - self.last_activity).total_seconds()
+            "uptime": (datetime.now() - self.last_activity).total_seconds(),
+            "has_thinking": self.last_thinking is not None,
+            "tool_registry_loaded": self.tool_registry is not None
         }

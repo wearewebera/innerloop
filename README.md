@@ -36,10 +36,12 @@ InnerLoop consists of three specialized agents working in coordination:
 
 - **Python 3.12** (avoiding 3.13 compatibility issues)
 - **Ollama** for local LLM inference
+- **DeepSeek-R1:14b** reasoning model with thinking capabilities
 - **ChromaDB** (in-memory) for semantic memory search
 - **SQLite** for conversation logging
-- **Textual** for terminal UI (coming soon)
+- **Textual** for multi-panel terminal UI
 - **asyncio** for concurrent agent execution
+- **Tool System** for extended capabilities
 
 ## 📋 Prerequisites
 
@@ -49,9 +51,9 @@ InnerLoop consists of three specialized agents working in coordination:
 - Compatible LLM model downloaded via Ollama
 
 ```bash
-# Install Ollama and download a model
+# Install Ollama and download the reasoning model
 curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull gemma3:27b-it-qat
+ollama pull deepseek-r1:14b
 ```
 
 ## 🚀 Quick Start
@@ -93,17 +95,30 @@ python main.py --help
 ```
 innerloop/
 ├── agents/
-│   ├── base_agent.py          # Shared agent functionality
+│   ├── base_agent.py          # Shared agent functionality with thinking
 │   ├── experiencer.py         # Primary consciousness agent
 │   ├── stream_generator.py    # Background thought generator
-│   └── attention_director.py  # Priority manager
+│   └── attention_director.py  # Priority manager with reasoning
+├── tools/
+│   ├── base_tool.py          # Tool system foundation
+│   ├── registry.py           # Tool discovery and management
+│   ├── memory_tools.py       # Memory search and storage
+│   ├── focus_tools.py        # Focus area analysis
+│   ├── decision_tools.py     # Autonomous decision making
+│   ├── reflection_tools.py   # Self-reflection capabilities
+│   └── time_tools.py         # Time awareness
 ├── memory/
 │   ├── chromadb_store.py     # In-memory semantic search
 │   └── conversation_log.py   # SQLite conversation history
 ├── communication/
 │   └── message_bus.py        # Async inter-agent messaging
 ├── ui/
-│   └── textual_ui.py         # TUI with panels (coming soon)
+│   └── innerloop_tui.py      # Multi-panel Textual interface
+├── prompts/                  # Agent system prompts
+│   ├── shared_identity.md    # Common identity
+│   ├── experiencer.md        # Experiencer role
+│   ├── stream_generator.md   # Stream generator role
+│   └── attention_director.md # Attention director role
 ├── config.yaml               # System configuration
 ├── main.py                   # Entry point
 ├── requirements.txt          # Python dependencies
@@ -116,9 +131,12 @@ The `config.yaml` file controls all aspects of the system:
 
 ```yaml
 model:
-  name: "gemma3:27b-it-qat"   # Ollama model to use
+  name: "deepseek-r1:14b"     # DeepSeek reasoning model
   temperature: 0.7            # Response creativity (0-1)
   max_tokens: 512             # Max response length
+  thinking:
+    enabled: true             # Enable step-by-step reasoning
+    display_thinking: true    # Show thinking in UI
 
 agents:
   shared_identity:            # Common identity for all agents
@@ -126,11 +144,20 @@ agents:
     personality: "curious, analytical, thoughtful"
     
   stream_generator:
-    thoughts_per_minute: 3    # Autonomous thought frequency
+    thoughts_per_minute: 1    # Autonomous thought frequency
     
   attention_director:
     priority_threshold: 0.3   # Min score to pass thoughts
     attention_budget: 5       # Max items per cycle
+
+tools:
+  enabled: true               # Enable tool calling
+  available_tools:
+    - memory_search          # Deep memory searches
+    - focus_analysis         # Analyze focus areas
+    - decision_maker         # Make autonomous decisions
+    - reflection             # Self-reflection
+    - time_awareness         # Current time/date
 
 memory:
   chromadb:
@@ -143,23 +170,26 @@ memory:
 
 1. **Continuous Processing**: All three agents run concurrently in async loops
 
-2. **Thought Generation**: Stream Generator produces thoughts every ~20 seconds:
-   - Associations with recent topics
+2. **Thought Generation**: Stream Generator produces thoughts every ~60 seconds:
+   - Associations with recent topics (using reasoning for focused areas)
    - Memory recalls
    - Wonderings and reflections
-   - Occasional insights
+   - Deep insights using step-by-step thinking
+   - Focus acknowledgments when new themes emerge
 
 3. **Attention Management**: Attention Director evaluates each thought for:
-   - Relevance to current context
+   - Relevance to current context (using reasoning for complex evaluations)
    - Urgency and importance
    - Novelty compared to recent thoughts
    - Emotional significance
+   - Focus area alignment and organic theme emergence
 
 4. **Conscious Processing**: Experiencer integrates high-priority thoughts and:
-   - Responds to user input
-   - Makes decisions
-   - Updates memory
+   - Responds to user input (using deep thinking for complex questions)
+   - Makes decisions using tool assistance
+   - Updates memory with enhanced metadata
    - Maintains conversation flow
+   - Shares spontaneous thoughts during idle periods
 
 5. **Memory Integration**: 
    - ChromaDB stores and retrieves semantic memories
@@ -205,12 +235,12 @@ Shows ALL agent activity in real-time across four panels:
 │ I wonder about the     │ Priority: 0.25 < 0.3    │ query about conscious-  │
 │ nature of...           │ Decision: ✗ FILTERED    │ ness...                 │
 │                        │                         │                         │
-│ [12:34:18] 💭 Memory   │ [12:34:18] Evaluating.. │ 💭 Integrating high-    │
-│ Remember our discuss-  │ Priority: 0.65 > 0.3    │ priority insight...     │
+│ [12:34:18] 💭 Memory   │ [12:34:18] Evaluating.. │ 🧠 Reasoning: Let me    │
+│ Remember our discuss-  │ Priority: 0.65 > 0.3    │ think step by step...   │
 │ ion about emergence... │ Decision: ✓ PASS        │                         │
-│                        │ Relevance: 0.7          │ 💭 Recalling previous   │
-│ [12:34:21] 🔗 Assoc.   │                         │ conversation about      │
-│ This connects to...    │ [12:34:21] Evaluating.. │ emergent properties...  │
+│                        │ Relevance: 0.7          │ 🔧 Tool: time_awareness │
+│ [12:34:21] 🔗 Assoc.   │                         │ Current time: 12:34 PM  │
+│ This connects to...    │ [12:34:21] Evaluating.. │                         │
 └─────────────────────────┴─────────────────────────┴─────────────────────────┘
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              Main Conversation                              │
@@ -260,11 +290,17 @@ View logs in real-time to see the inner workings of the tri-agent system.
 - Simple CLI interface
 - Autonomous thought generation
 - Command-line UI mode selection
+- DeepSeek-R1 reasoning model integration
+- Tool system for extended capabilities
+- Step-by-step thinking processes
+- Spontaneous thought sharing
+- Organic focus area emergence
 
 ### 🔄 In Progress
 - Enhanced memory consolidation
 - Performance optimizations
-- Prompt externalization to files
+- Web search tool integration
+- Advanced tool chaining
 
 ### 📋 Planned Features
 - MCP integration for external tools
