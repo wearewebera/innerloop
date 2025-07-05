@@ -1,0 +1,91 @@
+# InnerLoop Configuration
+
+# Ollama connection (optional - defaults to OLLAMA_HOST env var or http://localhost:11434)
+# ollama_host: "http://localhost:11434"
+
+model:
+  name: "gemma3:27b-it-qat"          # Ollama model to use
+  temperature: 0.7           # Creativity level (0.0-1.0)
+  max_tokens: 512            # Maximum response length
+  timeout: 30                # Seconds to wait for response
+
+agents:
+  shared_identity:
+    name: "Alex"
+    age: 30
+    personality: "curious, analytical, thoughtful"
+    background: "AI researcher interested in consciousness and cognition"
+    interests:
+      - "philosophy of mind"
+      - "emergent systems"
+      - "human-AI interaction"
+      - "creativity and innovation"
+  
+  # Agent prompts are now loaded from markdown files in prompts/ folder:
+  # - prompts/shared_identity.md (used by all agents)
+  # - prompts/experiencer.md
+  # - prompts/stream_generator.md
+  # - prompts/attention_director.md
+  
+  experiencer:
+    role: "primary consciousness and decision maker"
+    response_style: "thoughtful and engaging"
+  
+  stream_generator:
+    role: "background thought generator"  
+    thoughts_per_minute: 3
+    context_window: 10        # Number of recent memories to consider
+    creativity_boost: 0.2     # Additional temperature for variety
+  
+  attention_director:
+    role: "attention and priority manager"
+    priority_threshold: 0.3   # Minimum score to pass to experiencer
+    attention_budget: 5       # Max items to process per cycle
+    evaluation_criteria:
+      relevance: 0.4
+      urgency: 0.3
+      novelty: 0.2
+      emotional_significance: 0.1
+
+memory:
+  chromadb:
+    collection_name: "innerloop_memories"
+    embedding_model: "all-MiniLM-L6-v2"
+    max_results: 10
+    similarity_threshold: 0.7
+  
+  sqlite:
+    db_path: "conversation_history.db"
+    max_history: 10000
+    cleanup_days: 30
+
+ui:
+  theme: "dark"
+  refresh_rate: 100          # milliseconds
+  show_timestamps: true
+  max_display_items: 20      # Per agent panel
+  show_thoughts: true        # Display autonomous thoughts in CLI
+  thought_min_priority: 0.3  # Minimum priority to display
+  max_thought_display: 5     # Max thoughts to show at once
+  show_thought_metadata: true # Show priority and sender info
+  colors:
+    high_priority: "red"
+    medium_priority: "yellow"
+    low_priority: "green"
+    thought: "blue"
+    memory: "magenta"
+    external: "cyan"
+
+logging:
+  level: "INFO"
+  format: "structured"       # or "simple"
+  file: "innerloop.log"
+  max_size_mb: 100
+  rotate_count: 5
+
+performance:
+  message_queue_size: 1000
+  async_workers: 3
+  memory_cache_size: 100
+  ollama_retry_attempts: 3
+  ollama_retry_delay: 1      # seconds
