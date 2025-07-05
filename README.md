@@ -51,7 +51,7 @@ InnerLoop consists of three specialized agents working in coordination:
 ```bash
 # Install Ollama and download a model
 curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull gemma2:9b  # or llama3.1:8b
+ollama pull gemma3:27b-it-qat
 ```
 
 ## 🚀 Quick Start
@@ -110,7 +110,7 @@ The `config.yaml` file controls all aspects of the system:
 
 ```yaml
 model:
-  name: "gemma2:9b"           # Ollama model to use
+  name: "gemma3:27b-it-qat"   # Ollama model to use
   temperature: 0.7            # Response creativity (0-1)
   max_tokens: 512             # Max response length
 

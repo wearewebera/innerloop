@@ -10,7 +10,7 @@ InnerLoop is an AI architecture that implements genuine autonomous initiative th
 
 ## Technical Stack
 - Python 3.12 (NOT 3.13 due to compatibility issues)
-- Ollama for local LLM inference (gemma2:9b model)
+- Ollama for local LLM inference (gemma3:27b-it-qat model)
 - ChromaDB (in-memory) for semantic memory
 - SQLite for conversation logging
 - Textual for TUI (pending implementation)
