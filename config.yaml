@@ -155,4 +155,4 @@ tools:
     - decision_maker         # Make autonomous decisions
     - reflection             # Self-reflection capabilities
     - time_awareness         # Current time/date
-    - web_search             # External information (optional)
+    # - web_search           # External information (not implemented yet)

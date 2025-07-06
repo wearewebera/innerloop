@@ -88,9 +88,18 @@ class MemorySearchTool(BaseTool):
             # Format results
             formatted_memories = []
             for memory in memories:
+                # Safe timestamp handling
+                timestamp = memory.get('timestamp', '')
+                if timestamp and hasattr(timestamp, 'isoformat'):
+                    timestamp_str = timestamp.isoformat()
+                elif timestamp:
+                    timestamp_str = str(timestamp)
+                else:
+                    timestamp_str = ''
+                    
                 formatted_memories.append({
                     "content": memory.get('content', ''),
-                    "timestamp": memory.get('timestamp', '').isoformat() if hasattr(memory.get('timestamp', ''), 'isoformat') else str(memory.get('timestamp', '')),
+                    "timestamp": timestamp_str,
                     "relevance": memory.get('relevance', 1.0),
                     "type": memory.get('memory_type', 'unknown'),
                     "agent": memory.get('agent_id', 'unknown')

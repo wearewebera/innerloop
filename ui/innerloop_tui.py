@@ -342,6 +342,9 @@ class InnerLoopTUI(App):
         self.update_task = asyncio.create_task(self._update_panels())
         self.metrics_task = asyncio.create_task(self._update_metrics())
         
+        # Store tasks for cleanup
+        self._tasks = [self.monitor_task, self.update_task, self.metrics_task]
+        
         # Welcome message
         self.conversation_panel.add_message(
             "System", 
@@ -555,3 +558,14 @@ class InnerLoopTUI(App):
     def action_toggle_internal(self):
         """Toggle internal processing panel visibility."""
         self.internal_panel.visible = not self.internal_panel.visible
+    
+    async def on_unmount(self):
+        """Clean up when app is closing."""
+        # Cancel all tasks
+        if hasattr(self, '_tasks'):
+            for task in self._tasks:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass

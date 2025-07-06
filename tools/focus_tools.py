@@ -1,5 +1,6 @@
 """Focus analysis and management tools for InnerLoop agents."""
 
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from tools.base_tool import BaseTool, ToolParameter
 import structlog
@@ -186,6 +187,3 @@ class FocusAnalysisTool(BaseTool):
                 "average_intensity": sum(f.intensity for f in self.focus_areas) / len(self.focus_areas) if self.focus_areas else 0
             }
 
-
-# Import datetime if not already imported
-from datetime import datetime

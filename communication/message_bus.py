@@ -25,6 +25,9 @@ class MessageBus:
             'messages_dropped': 0
         }
         self.logger = logger.bind(component="message_bus")
+        # Add locks for thread safety
+        self._metrics_lock = asyncio.Lock()
+        self._history_lock = asyncio.Lock()
         
     def register_agent(self, agent_id: str):
         """Register an agent with the message bus."""
@@ -53,12 +56,15 @@ class MessageBus:
     
     async def send(self, message: Message):
         """Send a message to recipient(s)."""
-        self.metrics['messages_sent'] += 1
-        self.message_history.append(message)
+        async with self._metrics_lock:
+            self.metrics['messages_sent'] += 1
         
-        # Keep history limited
-        if len(self.message_history) > 1000:
-            self.message_history = self.message_history[-1000:]
+        async with self._history_lock:
+            self.message_history.append(message)
+            
+            # Keep history limited
+            if len(self.message_history) > 1000:
+                self.message_history = self.message_history[-1000:]
         
         # Direct message to specific recipient
         if message.recipient in self.queues:
@@ -80,7 +86,8 @@ class MessageBus:
             self.logger.warning("Unknown recipient", 
                               recipient=message.recipient,
                               sender=message.sender)
-            self.metrics['messages_dropped'] += 1
+            async with self._metrics_lock:
+                self.metrics['messages_dropped'] += 1
     
     async def _deliver_to_agent(self, agent_id: str, message: Message):
         """Deliver a message to a specific agent."""
@@ -90,7 +97,8 @@ class MessageBus:
                 # Try to put message without blocking
                 try:
                     queue.put_nowait(message)
-                    self.metrics['messages_delivered'] += 1
+                    async with self._metrics_lock:
+                        self.metrics['messages_delivered'] += 1
                     self.logger.debug("Message delivered", 
                                     recipient=agent_id,
                                     sender=message.sender,
@@ -100,19 +108,22 @@ class MessageBus:
                     try:
                         queue.get_nowait()
                         queue.put_nowait(message)
-                        self.metrics['messages_delivered'] += 1
-                        self.metrics['messages_dropped'] += 1
+                        async with self._metrics_lock:
+                            self.metrics['messages_delivered'] += 1
+                            self.metrics['messages_dropped'] += 1
                         self.logger.warning("Queue full, dropped oldest message", 
                                           agent_id=agent_id)
                     except:
-                        self.metrics['messages_dropped'] += 1
+                        async with self._metrics_lock:
+                            self.metrics['messages_dropped'] += 1
                         self.logger.error("Failed to deliver message", 
                                         agent_id=agent_id)
         except Exception as e:
             self.logger.error("Message delivery error", 
                             agent_id=agent_id,
                             error=str(e))
-            self.metrics['messages_dropped'] += 1
+            async with self._metrics_lock:
+                self.metrics['messages_dropped'] += 1
     
     async def receive(self, agent_id: str, timeout: Optional[float] = None) -> List[Message]:
         """Receive all pending messages for an agent."""
@@ -190,11 +201,12 @@ class MessageBus:
             'history_size': len(self.message_history)
         }
     
-    def get_recent_messages(self, limit: int = 100, 
+    async def get_recent_messages(self, limit: int = 100, 
                           agent_id: Optional[str] = None,
                           message_type: Optional[str] = None) -> List[Message]:
         """Get recent messages from history with optional filtering."""
-        messages = self.message_history[-limit:]
+        async with self._history_lock:
+            messages = self.message_history[-limit:]
         
         if agent_id:
             messages = [m for m in messages 

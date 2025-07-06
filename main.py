@@ -235,9 +235,13 @@ class InnerLoop:
             except Exception as e:
                 logger.error("TUI error", error=str(e))
             finally:
-                # Cancel agent tasks
+                # Cancel agent tasks and await them
                 for task in agent_tasks:
                     task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
                 await self.shutdown()
         else:
             # CLI mode

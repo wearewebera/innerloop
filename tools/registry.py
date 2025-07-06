@@ -51,7 +51,7 @@ class ToolRegistry:
             'decision_maker': ('decision_tools', 'DecisionMakerTool'),
             'reflection': ('reflection_tools', 'ReflectionTool'),
             'time_awareness': ('time_tools', 'TimeAwarenessTool'),
-            'web_search': ('web_tools', 'WebSearchTool'),
+            # 'web_search': ('web_tools', 'WebSearchTool'),  # Not implemented yet
         }
         
         for tool_name in self.available_tools:

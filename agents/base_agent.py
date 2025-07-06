@@ -201,9 +201,25 @@ class BaseAgent(ABC):
             # Handle tool calls if present
             if 'tool_calls' in response.get('message', {}):
                 tool_results = await self._execute_tools(response['message']['tool_calls'])
-                # For now, return a summary of tool executions
-                # In a full implementation, we'd continue the conversation with tool results
-                return f"[Executed tools: {', '.join(t['function']['name'] for t in response['message']['tool_calls'])}]\n{response['message']['content']}"
+                
+                # Continue conversation with tool results
+                messages.append(response['message'])
+                messages.append({
+                    "role": "tool",
+                    "content": str(tool_results)
+                })
+                
+                # Get final response after tool execution
+                final_response = await self.ollama.chat(
+                    model=self.model_config['name'],
+                    messages=messages,
+                    options={
+                        "temperature": self.model_config['temperature'],
+                        "num_predict": self.model_config['max_tokens'],
+                    }
+                )
+                
+                return final_response['message']['content']
             
             return response['message']['content']
             
