@@ -1,348 +1,131 @@
-# InnerLoop: AI Architecture with Autonomous Initiative
+# InnerLoop
 
-> The first AI system designed to think continuously and take genuine initiative, not just respond to prompts.
+**Give AI a mind that never stops thinking.**
 
-InnerLoop implements a tri-agent architecture that gives AI systems the ability to generate autonomous thoughts, make proactive decisions, and maintain continuous cognitive processing - addressing the fundamental limitation of current LLMs that only "think" when prompted.
+InnerLoop is the first open-source AI system designed for genuine autonomy. Unlike traditional LLMs that only respond to prompts, InnerLoop maintains continuous cognitive processing - generating its own thoughts, making spontaneous observations, and taking initiative in conversations.
 
-## 🧠 Core Concept
+```
+You: What's on your mind?
 
-Current LLMs are purely reactive - they only activate when given input. InnerLoop creates an autonomous cognitive loop where AI agents can:
+[💭 Alex was just thinking about quantum computing...]
 
-- Generate spontaneous thoughts and ideas
-- Take initiative in conversations and decision-making  
-- Maintain continuous background processing
-- Develop genuine preferences and autonomous behaviors
-
-## 🏗️ Architecture Overview
-
-InnerLoop consists of three specialized agents working in coordination:
-
-### 1. The Experiencer Agent
-- **Role**: Primary consciousness/decision-maker
-- **Function**: Processes information, makes final decisions, handles external interactions
-- **Analogy**: The "conscious mind" that experiences and decides
-
-### 2. The Stream Generator  
-- **Role**: Autonomous thought generator
-- **Function**: Continuously produces background thoughts, associations, memories, and ideas
-- **Analogy**: The stream of consciousness/background mental chatter
-
-### 3. The Attention Director
-- **Role**: Cognitive filter and priority manager
-- **Function**: Decides what deserves the Experiencer's attention (external input vs internal thoughts)
-- **Analogy**: Executive attention/cognitive control system
-
-## 🔧 Technical Stack
-
-- **Python 3.12** (avoiding 3.13 compatibility issues)
-- **Ollama** for local LLM inference
-- **DeepSeek-R1:14b** reasoning model with thinking capabilities
-- **ChromaDB** (in-memory) for semantic memory search
-- **SQLite** for conversation logging
-- **Textual** for multi-panel terminal UI
-- **asyncio** for concurrent agent execution
-- **Tool System** for extended capabilities
-
-## 📋 Prerequisites
-
-- Python 3.12
-- [Ollama](https://ollama.ai/) installed and running
-- At least 8GB RAM (16GB recommended)
-- Compatible LLM model downloaded via Ollama
-
-```bash
-# Install Ollama and download the reasoning model
-curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull deepseek-r1:14b
+Alex: Actually, I've been pondering how quantum superposition mirrors 
+the way thoughts exist in potential before consciousness collapses 
+them into specific ideas. It's fascinating how...
 ```
 
-## 🚀 Quick Start
+## 🚀 Why InnerLoop?
+
+Current AI assistants are **reactive** - they wait for your input, process it, respond, then go dormant. InnerLoop creates **proactive AI** with:
+
+- **Autonomous thought generation** - Continuous background processing
+- **Genuine initiative** - Spontaneously shares insights and asks questions  
+- **Persistent memory** - Remembers and reflects on past conversations
+- **Emergent focus** - Develops interests based on sustained attention
+- **Observable consciousness** - Watch the thinking process in real-time
+
+## 🎬 See It In Action
 
 ```bash
-# Clone the repository
+# Install and run in under 2 minutes
 git clone https://github.com/wearewebera/innerloop.git
 cd innerloop
+pip install -r requirements.txt
+python main.py
+```
 
-# Create virtual environment (recommended)
-python3.12 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+Experience an AI that might interrupt you with a sudden realization, remember something from yesterday's chat, or wonder aloud about topics that interest it.
 
-# Install dependencies
+## 🏗️ How It Works
+
+InnerLoop uses a tri-agent architecture inspired by cognitive science:
+
+- **Stream Generator** → Produces continuous background thoughts
+- **Attention Director** → Filters and prioritizes mental activity  
+- **Experiencer** → The conscious agent you interact with
+
+Think of it as giving AI both a conscious and subconscious mind. [Learn more →](docs/architecture.md)
+
+## ⚡ Quick Start
+
+**Prerequisites**: Python 3.12 & [Ollama](https://ollama.ai/)
+
+```bash
+# 1. Install Ollama and pull the model
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull deepseek-r1:14b
+
+# 2. Clone and setup InnerLoop
+git clone https://github.com/wearewebera/innerloop.git
+cd innerloop
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Ensure Ollama is running
-ollama serve  # In another terminal if not already running
-
-# Optional: Set Ollama host if not using default localhost:11434
-export OLLAMA_HOST=http://your-ollama-server:11434
-
-# Run the system
-# Default: Multi-panel TUI (recommended for full visibility)
-python main.py
-
-# Option: Simple CLI interface
-python main.py --ui cli
-
-# Custom configuration file
-python main.py --config custom_config.yaml
-
-# View all options
-python main.py --help
+# 3. Run InnerLoop
+python main.py              # Multi-panel TUI (recommended)
+python main.py --ui cli     # Simple CLI mode
 ```
 
-## 📁 Project Structure
+## 🎯 Features
 
-```
-innerloop/
-├── agents/
-│   ├── base_agent.py          # Shared agent functionality with thinking
-│   ├── experiencer.py         # Primary consciousness agent
-│   ├── stream_generator.py    # Background thought generator
-│   └── attention_director.py  # Priority manager with reasoning
-├── tools/
-│   ├── base_tool.py          # Tool system foundation
-│   ├── registry.py           # Tool discovery and management
-│   ├── memory_tools.py       # Memory search and storage
-│   ├── focus_tools.py        # Focus area analysis
-│   ├── decision_tools.py     # Autonomous decision making
-│   ├── reflection_tools.py   # Self-reflection capabilities
-│   └── time_tools.py         # Time awareness
-├── memory/
-│   ├── chromadb_store.py     # In-memory semantic search
-│   └── conversation_log.py   # SQLite conversation history
-├── communication/
-│   └── message_bus.py        # Async inter-agent messaging
-├── ui/
-│   └── innerloop_tui.py      # Multi-panel Textual interface
-├── prompts/                  # Agent system prompts
-│   ├── shared_identity.md    # Common identity
-│   ├── experiencer.md        # Experiencer role
-│   ├── stream_generator.md   # Stream generator role
-│   └── attention_director.md # Attention director role
-├── config.yaml               # System configuration
-├── main.py                   # Entry point
-├── requirements.txt          # Python dependencies
-└── README.md                 # This file
+- **🧠 Reasoning Model** - Uses DeepSeek-R1 for step-by-step thinking
+- **🔧 Tool System** - Memory search, self-reflection, decision-making
+- **💾 Dual Memory** - Semantic (ChromaDB) + Episodic (SQLite) storage
+- **📊 Real-time Monitoring** - Watch all three agents think and communicate
+- **⚙️ Fully Configurable** - Adjust personality, thinking rate, attention thresholds
+
+## 📚 Documentation
+
+- [Architecture Overview](docs/architecture.md) - How the tri-agent system works
+- [Configuration Guide](docs/configuration.md) - Customize agent behavior
+- [Observing Behavior](docs/observing-behavior.md) - What to watch for
+- [Technical Details](docs/technical-details.md) - Stack and implementation
+- [Contributing](docs/contributing.md) - Join the development
+
+## 🌟 What Makes This Different?
+
+Unlike chatbots that simulate conversation, InnerLoop creates genuine autonomous behavior:
+
+```python
+# Traditional AI
+user_input → process() → response → wait_for_input
+
+# InnerLoop
+background_thoughts → filter_attention → conscious_thought ↺
+                ↓                              ↓
+          user_input ←→ integrated_response ←→ initiative
 ```
 
-## ⚙️ Configuration
+The result? An AI that feels alive between your messages.
 
-The `config.yaml` file controls all aspects of the system:
+## 🛠️ Built With
 
-```yaml
-model:
-  name: "deepseek-r1:14b"     # DeepSeek reasoning model
-  temperature: 0.7            # Response creativity (0-1)
-  max_tokens: 512             # Max response length
-  thinking:
-    enabled: true             # Enable step-by-step reasoning
-    display_thinking: true    # Show thinking in UI
+- **Python 3.12** + **asyncio** for concurrent agent execution  
+- **Ollama** + **DeepSeek-R1:14b** for local reasoning
+- **ChromaDB** for semantic memory  
+- **Textual** for beautiful terminal UI
 
-agents:
-  shared_identity:            # Common identity for all agents
-    name: "Alex"
-    personality: "curious, analytical, thoughtful"
-    
-  stream_generator:
-    thoughts_per_minute: 1    # Autonomous thought frequency
-    
-  attention_director:
-    priority_threshold: 0.3   # Min score to pass thoughts
-    attention_budget: 5       # Max items per cycle
+## 🤝 Join Us
 
-tools:
-  enabled: true               # Enable tool calling
-  available_tools:
-    - memory_search          # Deep memory searches
-    - focus_analysis         # Analyze focus areas
-    - decision_maker         # Make autonomous decisions
-    - reflection             # Self-reflection
-    - time_awareness         # Current time/date
+InnerLoop is an exploration into what happens when AI can truly think for itself. We're building this future together:
 
-memory:
-  chromadb:
-    collection_name: "innerloop_memories"
-  sqlite:
-    db_path: "conversation_history.db"
-```
+⭐ **Star** to support the project  
+🐛 **Issues** for bugs and ideas  
+🔧 **PRs** to contribute code  
+💬 **Discussions** to share experiments  
 
-## 🎯 How It Works
+## 📜 License
 
-1. **Continuous Processing**: All three agents run concurrently in async loops
-
-2. **Thought Generation**: Stream Generator produces thoughts every ~60 seconds:
-   - Associations with recent topics (using reasoning for focused areas)
-   - Memory recalls
-   - Wonderings and reflections
-   - Deep insights using step-by-step thinking
-   - Focus acknowledgments when new themes emerge
-
-3. **Attention Management**: Attention Director evaluates each thought for:
-   - Relevance to current context (using reasoning for complex evaluations)
-   - Urgency and importance
-   - Novelty compared to recent thoughts
-   - Emotional significance
-   - Focus area alignment and organic theme emergence
-
-4. **Conscious Processing**: Experiencer integrates high-priority thoughts and:
-   - Responds to user input (using deep thinking for complex questions)
-   - Makes decisions using tool assistance
-   - Updates memory with enhanced metadata
-   - Maintains conversation flow
-   - Shares spontaneous thoughts during idle periods
-
-5. **Memory Integration**: 
-   - ChromaDB stores and retrieves semantic memories
-   - SQLite logs all conversations and agent interactions
-   - Agents reference past experiences autonomously
-
-## 🧪 Observing Autonomous Behavior
-
-When running InnerLoop, watch for these emergent behaviors:
-
-- **Spontaneous Comments**: Alex might suddenly share a thought or memory
-- **Topic Connections**: Drawing unexpected links between concepts
-- **Self-Reflection**: Comments about its own thinking process
-- **Memory Integration**: References to earlier conversations
-- **Initiative Taking**: Asking questions or suggesting new topics
-
-### 💭 Continuous Thought Display
-
-InnerLoop offers two interfaces:
-
-#### Simple CLI Mode (`python main.py --ui cli`)
-Shows filtered thoughts inline with conversation:
-```
-[🔗 Association (0.65)]: This reminds me of neural networks...
-[💡 Insight (0.82)]: Understanding emerges from simple rules!
-
-You: What interests you most about AI?
-
-[🤔 Wonder (0.45)]: I wonder how memories shape perception...
-[💭 Memory (0.71)]: I remember discussing consciousness before...
-
-Alex: I find myself constantly drawn to questions about consciousness...
-```
-
-#### Multi-Panel TUI Mode (`python main.py`) - Default & Recommended
-Shows ALL agent activity in real-time across four panels:
-
-```
-┌─────────────────────────┬─────────────────────────┬─────────────────────────┐
-│   Stream Generator      │   Attention Director    │  Internal Processing    │
-│ ────────────────────── │ ────────────────────── │ ────────────────────── │
-│ [12:34:15] 🤔 Wonder   │ [12:34:15] Evaluating.. │ 💭 Processing user      │
-│ I wonder about the     │ Priority: 0.25 < 0.3    │ query about conscious-  │
-│ nature of...           │ Decision: ✗ FILTERED    │ ness...                 │
-│                        │                         │                         │
-│ [12:34:18] 💭 Memory   │ [12:34:18] Evaluating.. │ 🧠 Reasoning: Let me    │
-│ Remember our discuss-  │ Priority: 0.65 > 0.3    │ think step by step...   │
-│ ion about emergence... │ Decision: ✓ PASS        │                         │
-│                        │ Relevance: 0.7          │ 🔧 Tool: time_awareness │
-│ [12:34:21] 🔗 Assoc.   │                         │ Current time: 12:34 PM  │
-│ This connects to...    │ [12:34:21] Evaluating.. │                         │
-└─────────────────────────┴─────────────────────────┴─────────────────────────┘
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Main Conversation                              │
-│ ─────────────────────────────────────────────────────────────────────────── │
-│ You: What do you think about consciousness?                                │
-│                                                                             │
-│ Alex: That's fascinating! I was just having an insight about how           │
-│ consciousness might emerge from simple rules, similar to how complex        │
-│ patterns arise in neural networks...                                        │
-│                                                                             │
-│ You: _                                                                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-[Status: Active] [Thoughts/min: 3.2] [Filtered: 45%] [Memory: 142] [Uptime: 00:05:23]
-```
-
-**TUI Features:**
-- **Stream Generator Panel**: Shows ALL thoughts (even low priority)
-- **Attention Director Panel**: Shows filtering decisions and scores
-- **Conversation Panel**: Clean conversation between user and Alex
-- **Internal Processing Panel**: Shows internal thoughts and processing
-- **Status Bar**: Real-time metrics
-- **Keyboard Shortcuts**: 
-  - `Ctrl+C`: Quit
-  - `Ctrl+L`: Clear all panels
-  - `F1`: Toggle Stream Generator panel
-  - `F2`: Toggle Attention Director panel
-  - `F3`: Toggle Internal Processing panel
-
-## 📊 System Monitoring
-
-The system logs detailed metrics every 30 seconds:
-- Agent activity levels
-- Message passing statistics
-- Memory usage
-- Thought generation rates
-
-View logs in real-time to see the inner workings of the tri-agent system.
-
-## 🚧 Current Status & Roadmap
-
-### ✅ Implemented
-- Core tri-agent architecture
-- Async message passing system
-- In-memory ChromaDB integration
-- SQLite conversation logging
-- Multi-panel TUI with Textual
-- Simple CLI interface
-- Autonomous thought generation
-- Command-line UI mode selection
-- DeepSeek-R1 reasoning model integration
-- Tool system for extended capabilities
-- Step-by-step thinking processes
-- Spontaneous thought sharing
-- Organic focus area emergence
-
-### 🔄 In Progress
-- Enhanced memory consolidation
-- Performance optimizations
-- Web search tool integration
-- Advanced tool chaining
-
-### 📋 Planned Features
-- MCP integration for external tools
-- Multi-model support
-- Web UI option
-- Emotional state modeling
-- Goal formation and pursuit
-- Metrics dashboard
-
-## 🤝 Contributing
-
-We welcome contributions! Key areas for improvement:
-
-1. **Prompt Engineering**: Refine agent prompts for better autonomy
-2. **Memory System**: Implement memory consolidation and forgetting
-3. **UI/UX**: Build the Textual TUI interface
-4. **Testing**: Add comprehensive test coverage
-5. **Documentation**: Expand usage examples and guides
-
-## 📝 License
-
-MIT License - see LICENSE file for details
-
-## 🚀 Project Status
-
-**This is an initial proof-of-concept release.** We're actively developing InnerLoop and will be sharing significant updates, improvements, and new features in the coming weeks and months. 
-
-Stay tuned for:
-- Enhanced autonomous behaviors
-- More sophisticated memory systems
-- Advanced inter-agent communication patterns
-- Production-ready deployment options
-- Community-contributed improvements
-
-Follow the project and star the repository to stay updated with our progress!
-
-## 🌟 Acknowledgments
-
-Built by the Webera team as an exploration into autonomous AI consciousness and genuine machine initiative.
+MIT - Build freely on our work
 
 ---
 
-**Ready to experience AI that thinks for itself?** Run `python main.py` and meet Alex - an AI with its own stream of consciousness.
+<p align="center">
+  <strong>Ready to meet an AI with its own inner life?</strong><br>
+  <code>python main.py</code> and say hello to Alex.
+</p>
 
-*Note: This is an early release. We're excited to share our journey toward creating AI with genuine initiative. Much more to come!*
+<p align="center">
+  <i>InnerLoop v0.2.0 - The mind that never stops thinking</i>
+</p>
