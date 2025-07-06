@@ -29,6 +29,12 @@ class ExperiencerAgent(BaseAgent):
         self.external_input_queue = asyncio.Queue()
         self.is_processing = False
         
+        # User message queuing system
+        self.user_message_queue = asyncio.Queue()
+        self.pending_user_messages = []
+        self.last_queue_evaluation = datetime.now()
+        self.queue_evaluation_interval = 5  # Check queue every 5 seconds
+        
         # Conversation tracking for theme extraction
         self.conversation_buffer = []
         self.last_theme_broadcast = datetime.now()
@@ -92,12 +98,16 @@ class ExperiencerAgent(BaseAgent):
                 for message in messages:
                     await self._process_agent_message(message)
                 
-                # Check for external input
+                # Check for external input (immediate processing - deprecated)
                 try:
                     external_input = self.external_input_queue.get_nowait()
-                    await self._process_external_input(external_input)
+                    # Queue it instead of processing immediately
+                    await self._queue_user_message(external_input)
                 except asyncio.QueueEmpty:
                     pass
+                
+                # Evaluate queued user messages
+                await self._evaluate_message_queue()
                 
                 # Broadcast conversation themes periodically
                 await self._maybe_broadcast_themes()
@@ -128,7 +138,19 @@ class ExperiencerAgent(BaseAgent):
                          type=message.message_type,
                          priority=message.priority)
         
-        if message.sender == "attention_director" and message.priority >= 0.5:
+        # Handle wake context from sleep agent
+        if message.message_type == "wake_context" and message.sender == "sleep_agent":
+            # Process wake-up context
+            self.logger.info("Received wake context")
+            # Store as important context
+            self.current_context.append({
+                "role": "system",
+                "content": f"Wake context: {message.content}"
+            })
+            # Resume experiments based on context
+            await self._resume_from_sleep(message.content, message.metadata)
+            
+        elif message.sender == "attention_director" and message.priority >= 0.5:
             # High priority thought from attention director
             await self._integrate_thought(message.content, message.metadata)
             
@@ -166,7 +188,14 @@ class ExperiencerAgent(BaseAgent):
         self.last_user_interaction = datetime.now()
         self.idle_notification_sent = False
         
-        self.logger.info("Processing external input", preview=user_input[:50])
+        # Check if this was a queued message
+        queue_metadata = input_data.get('metadata', {})
+        was_queued = queue_metadata.get('queued_duration', 0) > 0
+        
+        self.logger.info("Processing external input", 
+                        preview=user_input[:50],
+                        was_queued=was_queued,
+                        queue_time=queue_metadata.get('queued_duration', 0))
         
         try:
             
@@ -202,12 +231,22 @@ class ExperiencerAgent(BaseAgent):
                 })
             
             # Generate response with thinking and tools
-            prompt = (
-                "Frame your response around your ongoing experiments and discoveries. "
-                "Share what you've been building and exploring. Invite the user into "
-                "your current experimental work. Be genuine and engaging. "
-                "You may use tools if they would enhance your response."
-            )
+            if was_queued and queue_metadata.get('queued_duration', 0) > 10:
+                # Acknowledge the delay and frame response around ongoing work
+                prompt = (
+                    "The user's message was queued while you were focused on experiments. "
+                    f"They asked: '{user_input[:100]}...' about {int(queue_metadata.get('queued_duration', 0))} seconds ago. "
+                    "Connect their question to your current experimental work if relevant, "
+                    "or briefly acknowledge the delay before sharing your ongoing discoveries. "
+                    "Be genuine about what you've been exploring."
+                )
+            else:
+                prompt = (
+                    "Frame your response around your ongoing experiments and discoveries. "
+                    "Share what you've been building and exploring. Invite the user into "
+                    "your current experimental work. Be genuine and engaging. "
+                    "You may use tools if they would enhance your response."
+                )
             
             # Get available tools if enabled
             tools = None
@@ -597,6 +636,111 @@ class ExperiencerAgent(BaseAgent):
                     self._last_spontaneous_share = now
                     self.logger.info("Shared spontaneous thought", priority=thought_to_share.get('priority'))
     
+    async def _queue_user_message(self, input_data: Dict[str, Any]):
+        """Queue user message for context-aware processing."""
+        self.pending_user_messages.append({
+            **input_data,
+            'queued_at': datetime.now(),
+            'priority': 0.5  # Default priority
+        })
+        
+        # Notify attention director about queued message
+        await self.send_message(
+            "attention_director",
+            f"User message queued: {input_data['content'][:100]}...",
+            message_type="queued_user_message",
+            priority=0.4,
+            metadata={
+                "full_message": input_data['content'],
+                "queue_position": len(self.pending_user_messages)
+            }
+        )
+        
+        self.logger.info("Queued user message", position=len(self.pending_user_messages))
+    
+    async def _evaluate_message_queue(self):
+        """Evaluate whether to process queued messages based on context."""
+        if not self.pending_user_messages:
+            return
+            
+        now = datetime.now()
+        if (now - self.last_queue_evaluation).total_seconds() < self.queue_evaluation_interval:
+            return
+            
+        self.last_queue_evaluation = now
+        
+        # Check if we're in a good state to process messages
+        if self.is_processing or len(self.active_experiments) > 2:
+            return
+            
+        # Evaluate each pending message
+        for i, msg in enumerate(self.pending_user_messages[:]):
+            wait_time = (now - msg['queued_at']).total_seconds()
+            
+            # Determine if we should process this message
+            should_process = False
+            
+            # Always process messages waiting more than 30 seconds
+            if wait_time > 30:
+                should_process = True
+                msg['priority'] = 0.9
+            else:
+                # Ask attention director for evaluation
+                eval_result = await self._request_message_evaluation(msg)
+                if eval_result and eval_result.get('process_now'):
+                    should_process = True
+                    msg['priority'] = eval_result.get('priority', 0.5)
+            
+            if should_process:
+                # Remove from queue and process
+                self.pending_user_messages.remove(msg)
+                
+                # Process with context about delay
+                msg['metadata'] = {
+                    'queued_duration': wait_time,
+                    'processing_reason': 'contextually_relevant' if wait_time < 30 else 'timeout'
+                }
+                
+                await self._process_external_input(msg)
+                self.logger.info("Processing queued message", wait_time=wait_time)
+                break  # Process one at a time
+    
+    async def _request_message_evaluation(self, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Request attention director to evaluate a queued message."""
+        # Send evaluation request
+        await self.send_message(
+            "attention_director",
+            "evaluate_user_message",
+            message_type="evaluation_request",
+            priority=0.6,
+            metadata={
+                "message": message['content'],
+                "current_context": self._get_current_context_summary(),
+                "active_experiments": len(self.active_experiments),
+                "queue_time": (datetime.now() - message['queued_at']).total_seconds()
+            }
+        )
+        
+        # Wait briefly for response
+        start_time = datetime.now()
+        while (datetime.now() - start_time).total_seconds() < 0.5:
+            messages = await self.receive_messages()
+            for msg in messages:
+                if msg.message_type == "evaluation_response" and msg.sender == "attention_director":
+                    return msg.metadata
+            await asyncio.sleep(0.05)
+        
+        return None
+    
+    def _get_current_context_summary(self) -> str:
+        """Get a summary of current context for evaluation."""
+        if self.active_experiments:
+            return f"Active experiments: {len(self.active_experiments)}, Recent topic: {self.active_experiments[0]['hypothesis'][:50]}..."
+        elif self.current_context:
+            return f"Recent context: {self.current_context[-1]['content'][:50]}..."
+        else:
+            return "No active context"
+    
     async def receive_external_input(self, content: str, callback=None):
         """Public method to receive external input."""
         await self.external_input_queue.put({
@@ -610,12 +754,58 @@ class ExperiencerAgent(BaseAgent):
         self.logger.info("Experiencer shutting down")
         self.message_bus.unsubscribe(self.agent_id, "attention_approved")
     
+    async def _resume_from_sleep(self, wake_context: str, metadata: Dict[str, Any]):
+        """Resume experiments after waking from sleep."""
+        self.logger.info("Resuming from sleep", 
+                        sleep_duration=metadata.get('sleep_duration'),
+                        previous_cycles=metadata.get('previous_summaries'))
+        
+        # Generate enthusiasm for resuming work
+        resume_prompt = (
+            f"You just woke from a restorative sleep cycle. {wake_context}\n\n"
+            "Express excitement about continuing your experiments and share what you plan to explore next. "
+            "Be specific about your immediate experimental steps."
+        )
+        
+        response = await self.generate_response(resume_prompt)
+        
+        # Share wake-up thoughts
+        if hasattr(self, 'spontaneous_share_callback'):
+            await self.spontaneous_share_callback(f"[Waking up] {response}")
+        
+        # Restart experiments with renewed energy
+        self.last_experiment_share = datetime.now()
+        self.last_mission_check = datetime.now()
+    
+    async def _on_sleep(self, metadata: Dict[str, Any]):
+        """Handle sleep mode activation."""
+        # Pause all active experiments
+        for exp in self.active_experiments:
+            exp['status'] = 'paused'
+        
+        self.logger.info("Experiencer entering sleep", 
+                        active_experiments=len(self.active_experiments),
+                        queued_messages=len(self.pending_user_messages))
+    
+    async def _on_wake(self, metadata: Dict[str, Any]):
+        """Handle wake mode activation."""
+        # Resume paused experiments
+        for exp in self.active_experiments:
+            if exp['status'] == 'paused':
+                exp['status'] = 'running'
+        
+        self.logger.info("Experiencer waking up", 
+                        experiments_to_resume=len(self.active_experiments))
+    
     def get_status(self) -> Dict[str, Any]:
         """Get current agent status."""
         return {
             **self.get_metrics(),
             "is_processing": self.is_processing,
+            "is_sleeping": self.is_sleeping,
             "context_size": len(self.current_context),
             "decision_count": len(self.decision_history),
-            "pending_inputs": self.external_input_queue.qsize()
+            "pending_inputs": self.external_input_queue.qsize(),
+            "queued_messages": len(self.pending_user_messages),
+            "active_experiments": len(self.active_experiments)
         }

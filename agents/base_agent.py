@@ -52,6 +52,7 @@ class BaseAgent(ABC):
         
         # Agent state
         self.is_running = False
+        self.is_sleeping = False  # Sleep mode state
         self.message_count = 0
         self.last_activity = datetime.now()
         
@@ -239,7 +240,33 @@ class BaseAgent(ABC):
         if messages:
             self.last_activity = datetime.now()
             self.logger.debug("Messages received", count=len(messages))
+            
+            # Check for system commands
+            for msg in messages[:]:  # Use slice to allow removal during iteration
+                if msg.message_type == "system_command":
+                    await self._handle_system_command(msg)
+                    messages.remove(msg)  # Don't pass system commands to agent logic
+        
         return messages
+    
+    async def _handle_system_command(self, message: Message):
+        """Handle system-level commands like sleep/wake."""
+        command = message.content
+        
+        if command == "SLEEP_MODE_ACTIVATED":
+            self.is_sleeping = True
+            self.logger.info("Entering sleep mode", reason=message.metadata.get('reason'))
+            # Subclasses can override _on_sleep for custom behavior
+            if hasattr(self, '_on_sleep'):
+                await self._on_sleep(message.metadata)
+                
+        elif command == "SLEEP_MODE_DEACTIVATED":
+            self.is_sleeping = False
+            wake_context = message.metadata.get('wake_context', '')
+            self.logger.info("Waking from sleep mode", context_preview=wake_context[:50])
+            # Subclasses can override _on_wake for custom behavior
+            if hasattr(self, '_on_wake'):
+                await self._on_wake(message.metadata)
     
     async def store_memory(self, content: str, memory_type: str = "general"):
         """Store a memory in the memory store."""

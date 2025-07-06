@@ -200,9 +200,24 @@ class StatusBar(Static):
     filtered_percentage = reactive(0.0)
     memory_count = reactive(0)
     uptime = reactive("00:00:00")
+    queued_messages = reactive(0)
+    active_experiments = reactive(0)
     
     def render(self):
-        return f"[Status: Active] [Thoughts/min: {self.thoughts_per_min:.1f}] [Filtered: {self.filtered_percentage:.0f}%] [Memory: {self.memory_count}] [Uptime: {self.uptime}]"
+        queue_style = "bold red" if self.queued_messages > 0 else "dim"
+        experiment_style = "bold green" if self.active_experiments > 0 else "dim"
+        
+        status_parts = [
+            "[Status: Active]",
+            f"[Thoughts/min: {self.thoughts_per_min:.1f}]",
+            f"[Filtered: {self.filtered_percentage:.0f}%]",
+            f"[Memory: {self.memory_count}]",
+            f"[{queue_style}]Queued: {self.queued_messages}[/{queue_style}]",
+            f"[{experiment_style}]Experiments: {self.active_experiments}[/{experiment_style}]",
+            f"[Uptime: {self.uptime}]"
+        ]
+        
+        return " ".join(status_parts)
 
 
 class InnerLoopTUI(App):
@@ -352,17 +367,24 @@ class InnerLoopTUI(App):
                 response_text = response
                 response_received.set()
             
+            # Notify that message is being queued
+            self.conversation_panel.add_message(
+                "System", 
+                "[Your message has been queued. Alex will respond when contextually appropriate.]",
+                is_thought=True
+            )
+            
             await self.agents['experiencer'].receive_external_input(
                 user_input, response_callback
             )
             
             # Wait for response
             try:
-                await asyncio.wait_for(response_received.wait(), timeout=30)
+                await asyncio.wait_for(response_received.wait(), timeout=60)  # Increased timeout for queued messages
                 if response_text:
                     self.conversation_panel.add_message("Alex", response_text)
             except asyncio.TimeoutError:
-                self.conversation_panel.add_message("System", "[Response timeout]")
+                self.conversation_panel.add_message("System", "[Response pending - Alex is focused on experiments]")
     
     async def _handle_spontaneous_share(self, thought: str):
         """Handle spontaneous thought sharing from Experiencer."""
@@ -503,6 +525,12 @@ class InnerLoopTUI(App):
                 if hasattr(self, 'memory_store'):
                     stats = self.memory_store.get_stats()
                     self.status_bar.memory_count = stats.get('total_memories', 0)
+                
+                # Queued messages and experiments from Experiencer
+                if self.agents and 'experiencer' in self.agents:
+                    status = self.agents['experiencer'].get_status()
+                    self.status_bar.queued_messages = status.get('queued_messages', 0)
+                    self.status_bar.active_experiments = status.get('active_experiments', 0)
                     
             except Exception as e:
                 logger.error("Metrics update error", error=str(e))

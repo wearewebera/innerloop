@@ -16,9 +16,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from agents.experiencer import ExperiencerAgent
 from agents.stream_generator import StreamGeneratorAgent
 from agents.attention_director import AttentionDirectorAgent
+from agents.sleep_agent import SleepAgent
 from communication.message_bus import MessageBus
 from memory.chromadb_store import ChromaMemoryStore
 from memory.conversation_log import ConversationLogger
+from initial_conversation import InitialConversation
 from ollama import AsyncClient
 
 # Configure structured logging
@@ -94,7 +96,7 @@ class InnerLoop:
         logger.info("Initializing agents...")
         
         # Register agents with message bus
-        for agent_id in ['experiencer', 'stream_generator', 'attention_director']:
+        for agent_id in ['experiencer', 'stream_generator', 'attention_director', 'sleep_agent']:
             self.message_bus.register_agent(agent_id)
         
         # Create agents
@@ -107,6 +109,10 @@ class InnerLoop:
         )
         
         self.agents['attention_director'] = AttentionDirectorAgent(
+            self.config, self.message_bus, self.memory_store
+        )
+        
+        self.agents['sleep_agent'] = SleepAgent(
             self.config, self.message_bus, self.memory_store
         )
         
@@ -187,7 +193,7 @@ class InnerLoop:
             logger.error(f"Make sure Ollama is running at {ollama_host}")
             raise
     
-    async def start(self):
+    async def start(self, auto_start=False, start_theme=None):
         """Start all agents and the system."""
         self.is_running = True
         logger.info("Starting InnerLoop agents...")
@@ -198,6 +204,25 @@ class InnerLoop:
             task = asyncio.create_task(agent.start())
             agent_tasks.append(task)
             logger.info(f"Started {name} agent")
+        
+        # Handle auto-start mode
+        if auto_start:
+            logger.info("Auto-start mode: Generating initial agent conversation")
+            initial_conv = InitialConversation(self.message_bus, self.agents)
+            
+            # Give agents a moment to stabilize
+            await asyncio.sleep(2)
+            
+            # Start with active experiments to show ongoing work
+            await initial_conv.start_with_active_experiments()
+            
+            # Wait a bit before starting conversation
+            await asyncio.sleep(2)
+            
+            # Generate initial conversation
+            await initial_conv.generate_initial_conversation(theme=start_theme)
+            
+            logger.info("Initial autonomous conversation started")
         
         if self.ui_mode == "tui":
             # Give agents a moment to start
@@ -393,6 +418,11 @@ async def main():
                         help="User interface mode (default: tui)")
     parser.add_argument("--config", default="config.yaml",
                         help="Path to configuration file (default: config.yaml)")
+    parser.add_argument("--auto-start", action="store_true",
+                        help="Start with autonomous agent conversation (no initial user input)")
+    parser.add_argument("--start-theme", choices=["consciousness_exploration", "pattern_recognition", 
+                                                  "creativity_mechanics", "learning_architecture"],
+                        help="Theme for initial autonomous conversation")
     args = parser.parse_args()
     
     # Display banner
@@ -402,11 +432,14 @@ async def main():
         print("\n🧠 InnerLoop - AI with Autonomous Initiative")
     print("Starting system...\n")
     
+    if args.auto_start:
+        print("🤖 Auto-start mode: Agents will begin with autonomous exploration\n")
+    
     innerloop = InnerLoop(config_path=args.config, ui_mode=args.ui)
     
     try:
         await innerloop.initialize()
-        await innerloop.start()
+        await innerloop.start(auto_start=args.auto_start, start_theme=args.start_theme)
     except KeyboardInterrupt:
         print("\n\nShutting down...")
     except Exception as e:

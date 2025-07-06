@@ -36,6 +36,14 @@ agents:
   experiencer:
     role: "primary consciousness and decision maker"
     response_style: "thoughtful and engaging"
+    # Message queuing settings
+    queue_evaluation_interval: 5    # Check queue every 5 seconds
+    max_queue_wait: 30             # Process after 30 seconds regardless
+    autonomous_share_interval: 20   # Share experiments every 20 seconds when idle
+    mission_check_interval: 180     # Check mission progress every 3 minutes
+    # Experiment settings
+    max_active_experiments: 3       # Maximum concurrent experiments
+    experiment_timeout: 600         # Abandon experiments after 10 minutes
   
   stream_generator:
     role: "autonomous experimental thought laboratory"  
@@ -45,15 +53,15 @@ agents:
     # Adaptive frequency settings
     adaptive_frequency:
       enabled: true
-      conversation_active_multiplier: 0.8  # Maintain high activity during conversation
-      idle_multiplier: 1.2                 # Slightly higher when alone (prime experiment time)
-      min_thoughts_per_minute: 1.0         # Never go below 1 thought per minute
-      max_thoughts_per_minute: 3.0         # Allow up to 3 thoughts per minute
+      conversation_active_multiplier: 1.0  # No slowdown during conversation
+      idle_multiplier: 1.5                 # Much higher when alone (prime experiment time)
+      min_thoughts_per_minute: 1.5         # Never go below 1.5 thoughts per minute
+      max_thoughts_per_minute: 4.0         # Allow up to 4 thoughts per minute
     # Conversation awareness settings
     conversation_awareness:
       enabled: true
-      influence_strength: 0.1    # Minimal conversation influence
-      update_interval: 60        # Less frequent updates
+      influence_strength: 0.05   # Minimal conversation influence (reduced from 0.1)
+      update_interval: 120       # Much less frequent updates (2 minutes)
       theme_extraction: true     # Extract abstract themes vs raw content
       maintain_autonomy: true    # Ensure thoughts remain independent
     # Mission-focused settings
@@ -73,7 +81,15 @@ agents:
       teaching_opportunity: 0.1
       creative_novelty: 0.05
     # External input handling
-    external_input_boost: 1.2  # Reduced from default 1.5x
+    external_input_boost: 1.0  # No boost for external inputs (treat equally)
+  
+  sleep_agent:
+    role: "sleep coordinator and dream consolidator"
+    sleep_interval: 600       # Sleep every 10 minutes
+    loop_detection_window: 60 # Look for loops in 1-minute window
+    loop_threshold: 5         # Sleep if pattern repeats 5 times
+    wake_context_length: 3    # Messages to include in wake context
+    min_sleep_duration: 10    # Minimum sleep duration in seconds
 
 memory:
   chromadb:

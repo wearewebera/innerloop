@@ -138,7 +138,7 @@ class StreamGeneratorAgent(BaseAgent):
                                    thoughts_per_minute=self.thoughts_per_minute,
                                    conversation_active=self.conversation_active)
                 
-                if time_since_last >= self.thought_interval:
+                if time_since_last >= self.thought_interval and not self.is_sleeping:
                     self.logger.info("Generating thought",
                                    time_since_last=time_since_last,
                                    interval=self.thought_interval)

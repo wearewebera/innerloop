@@ -138,25 +138,32 @@ class AttentionDirectorAgent(BaseAgent):
                 # Collect incoming messages
                 messages = await self.receive_messages()
                 
-                # Add to attention queue with evaluated priority
+                # Handle special message types
                 for message in messages:
+                    # Handle user message evaluation requests
+                    if message.message_type == "evaluation_request" and message.content == "evaluate_user_message":
+                        await self._handle_user_message_evaluation(message)
+                        continue
                     
+                    # Regular message evaluation
                     evaluated = await self._evaluate_message(message)
                     if evaluated:
                         self.attention_queue.append(evaluated)
                 
-                # Process attention queue
-                if self.attention_queue:
+                # Process attention queue (but not if sleeping)
+                if self.attention_queue and not self.is_sleeping:
                     await self._process_attention_queue()
                 
-                # Update focus if needed
-                await self._update_focus()
+                # Update focus if needed (but not if sleeping)
+                if not self.is_sleeping:
+                    await self._update_focus()
                 
-                # Manage organic focus areas
-                await self._manage_focus_areas()
+                # Manage organic focus areas (but not if sleeping)
+                if not self.is_sleeping:
+                    await self._manage_focus_areas()
                 
                 # Periodically analyze focus with tools
-                if hasattr(self, 'tool_registry') and self.focus_areas:
+                if hasattr(self, 'tool_registry') and self.focus_areas and not self.is_sleeping:
                     await self._analyze_focus_with_tools()
                 
                 # Small delay
@@ -441,6 +448,79 @@ class AttentionDirectorAgent(BaseAgent):
                         )
                 except Exception as e:
                     self.logger.error("Focus update failed", error=str(e))
+    
+    async def _handle_user_message_evaluation(self, request: Message):
+        """Evaluate whether a queued user message should be processed now."""
+        metadata = request.metadata
+        user_message = metadata.get('message', '')
+        current_context = metadata.get('current_context', '')
+        active_experiments = metadata.get('active_experiments', 0)
+        queue_time = metadata.get('queue_time', 0)
+        
+        # Evaluate relevance to current focus areas
+        focus_relevance = 0.0
+        if self.focus_areas:
+            relevance_scores = [focus.get_relevance_score(user_message) for focus in self.focus_areas]
+            focus_relevance = max(relevance_scores) if relevance_scores else 0.0
+        
+        # Check for mission-critical keywords in user message
+        mission_critical = any(keyword in user_message.lower() for keyword in [
+            'stop', 'help', 'error', 'bug', 'urgent', 'important', 'please',
+            'experiment', 'test', 'build', 'create', 'hypothesis'
+        ])
+        
+        # Determine if message should be processed
+        should_process = False
+        priority = 0.5
+        
+        # High relevance to current focus
+        if focus_relevance > 0.6:
+            should_process = True
+            priority = min(0.9, focus_relevance)
+        # Mission-critical or urgent
+        elif mission_critical:
+            should_process = True
+            priority = 0.8
+        # User has been waiting too long
+        elif queue_time > 20:
+            should_process = True
+            priority = 0.7
+        # No active experiments and reasonable wait
+        elif active_experiments == 0 and queue_time > 10:
+            should_process = True
+            priority = 0.6
+        
+        # Send evaluation response
+        await self.send_message(
+            request.sender,
+            "evaluation_response",
+            message_type="evaluation_response",
+            priority=1.0,
+            metadata={
+                "process_now": should_process,
+                "priority": priority,
+                "reason": self._get_evaluation_reason(should_process, focus_relevance, mission_critical, queue_time)
+            }
+        )
+        
+        self.logger.debug("Evaluated user message",
+                         should_process=should_process,
+                         priority=priority,
+                         focus_relevance=focus_relevance)
+    
+    def _get_evaluation_reason(self, should_process: bool, focus_relevance: float, 
+                              mission_critical: bool, queue_time: float) -> str:
+        """Get human-readable reason for evaluation decision."""
+        if not should_process:
+            return "Not immediately relevant to current focus"
+        elif focus_relevance > 0.6:
+            return f"Highly relevant to current focus (relevance: {focus_relevance:.2f})"
+        elif mission_critical:
+            return "Contains mission-critical keywords"
+        elif queue_time > 20:
+            return f"User has been waiting {queue_time:.0f} seconds"
+        else:
+            return "Good time to respond"
     
     async def _cleanup(self):
         """Clean up resources."""

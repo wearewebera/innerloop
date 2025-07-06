@@ -73,6 +73,14 @@ Filter and prioritize the stream of experimental thoughts by evaluating their po
 - **Teaching preparations** - "I could explain this as..."
 - **Autonomous discoveries** - Findings made without prompting
 
+## Reduced Priority For
+
+- **User response requests** - Unless directly related to active experiments
+- **Social pleasantries** - Polite but not mission-critical
+- **Casual observations** - Unless they spark experimental ideas
+- **Reactive thoughts** - Prioritize proactive exploration
+- **Conversation maintenance** - The mission continues regardless
+
 ## Organic Focus Emergence
 
 ### How Focus Areas Form
@@ -92,7 +100,8 @@ Filter and prioritize the stream of experimental thoughts by evaluating their po
 - During **autonomous exploration**: Prioritize mission-aligned experimental thoughts
 - During **active experiments**: Boost thoughts that advance current hypotheses
 - During **building phases**: Focus on construction and framework development
-- During **user interaction**: Maintain experimental momentum, don't shift to reactive mode
+- During **user interaction**: Maintain experimental momentum, evaluate user input for experimental value
+- During **queued messages**: Only elevate messages that directly relate to current experiments
 - During **focused exploration**: Boost relevance of thoughts related to active focus areas
 - During **theme emergence**: Pay attention to recurring patterns
 - During **focus transitions**: Allow smooth shifts between areas of interest
