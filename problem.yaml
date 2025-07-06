@@ -1,0 +1,52 @@
+# Problem Definition for InnerLoop
+
+problem:
+  id: "consciousness-architecture-analysis"
+  title: "Analyzing InnerLoop's Architecture for Mimicking Consciousness"
+  description: |
+    Analyze the current InnerLoop tri-agent architecture and its effectiveness at 
+    mimicking consciousness. Consider the strengths, weaknesses, and potential 
+    improvements to make the system more genuinely conscious-like in its behaviors 
+    and outputs.
+  
+  context: |
+    InnerLoop consists of three agents:
+    - Experiencer: Primary consciousness and decision-maker
+    - Thoughts: Autonomous thought generator (stream of consciousness)
+    - Attention Director: Filters and prioritizes information flow
+    
+    The system uses message passing, memory systems, and tool calling to create
+    autonomous behaviors. However, it currently lacks concrete outputs and may
+    be too focused on abstract experimentation.
+  
+  questions_to_explore:
+    - Does the tri-agent architecture effectively model consciousness?
+    - What aspects of consciousness are well-represented?
+    - What aspects of consciousness are missing?
+    - How could the architecture be improved?
+    - Should there be additional agents or fewer agents?
+    - Is the message-passing approach sufficient for consciousness?
+    - How could the system produce more tangible outputs?
+    - What would make the system feel more genuinely conscious?
+  
+  success_criteria:
+    - Generate at least 5 concrete suggestions for improvement
+    - Each suggestion should be actionable and specific
+    - Suggestions should address both theoretical and practical aspects
+    - Consider both architectural changes and behavioral improvements
+  
+  output_format:
+    type: "markdown"
+    structure:
+      - Problem Analysis
+      - Current Strengths
+      - Current Weaknesses
+      - Suggested Improvements
+      - Implementation Priority
+      - Expected Impact
+  
+  constraints:
+    - Maintain the core philosophy of autonomous operation
+    - Keep suggestions technically feasible
+    - Consider computational efficiency
+    - Preserve the system's ability to learn and adapt

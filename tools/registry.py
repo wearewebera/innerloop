@@ -51,6 +51,10 @@ class ToolRegistry:
             'decision_maker': ('decision_tools', 'DecisionMakerTool'),
             'reflection': ('reflection_tools', 'ReflectionTool'),
             'time_awareness': ('time_tools', 'TimeAwarenessTool'),
+            'problem_loader': ('problem_solving_tools', 'ProblemLoaderTool'),
+            'suggestion_generator': ('problem_solving_tools', 'SuggestionGeneratorTool'),
+            'suggestion_saver': ('problem_solving_tools', 'SuggestionSaverTool'),
+            'problem_progress': ('problem_solving_tools', 'ProblemProgressTool'),
             # 'web_search': ('web_tools', 'WebSearchTool'),  # Not implemented yet
         }
         

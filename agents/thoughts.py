@@ -48,6 +48,11 @@ class ThoughtsAgent(BaseAgent):
         self.last_theme_update = datetime.now()
         self.conversation_active = False
         
+        # Problem-solving configuration
+        self.problem_config = config.get('problem_solving', {})
+        self.problem_solving_enabled = self.problem_config.get('enabled', False)
+        self.current_problem = None
+        
         self.thought_patterns = [
             "hypothesis",         # New: Form testable hypotheses
             "experiment",         # New: Run active experiments
@@ -61,6 +66,15 @@ class ThoughtsAgent(BaseAgent):
             "insight",
             "teaching_prep"       # New: Prepare discoveries for teaching
         ]
+        
+        # Add problem-solving patterns if enabled
+        if self.problem_solving_enabled:
+            self.thought_patterns.extend([
+                "problem_analysis",    # Analyze aspects of the current problem
+                "solution_brainstorm", # Brainstorm potential solutions
+                "implementation_idea", # Think about how to implement solutions
+                "critique",           # Critical analysis of existing approach
+            ])
         
         # Mission-focused configuration
         self.mission_config = self.agent_config.get('mission_focus', {})
@@ -98,6 +112,10 @@ class ThoughtsAgent(BaseAgent):
         self.message_bus.subscribe(self.agent_id, "experiment_started")
         self.message_bus.subscribe(self.agent_id, "mission_update")
         
+        # Subscribe to problem-solving notifications if enabled
+        if self.problem_solving_enabled:
+            self.message_bus.subscribe(self.agent_id, "topic:problem_solving")
+            self.message_bus.subscribe(self.agent_id, "suggestion_generated")
         
         # Load some initial memories to seed thoughts
         initial_memories = await self.retrieve_memories("", limit=20)
@@ -188,6 +206,18 @@ class ThoughtsAgent(BaseAgent):
             if "association" in self.thought_patterns:
                 weights[self.thought_patterns.index("association")] *= (1 + self.influence_strength)
         
+        # Boost problem-solving thoughts if enabled and problem is loaded
+        if self.problem_solving_enabled and self.current_problem:
+            problem_weight = self.problem_config.get('focus', {}).get('problem_weight', 0.8)
+            if "problem_analysis" in self.thought_patterns:
+                weights[self.thought_patterns.index("problem_analysis")] = 4.0 * problem_weight
+            if "solution_brainstorm" in self.thought_patterns:
+                weights[self.thought_patterns.index("solution_brainstorm")] = 3.5 * problem_weight
+            if "implementation_idea" in self.thought_patterns:
+                weights[self.thought_patterns.index("implementation_idea")] = 3.0 * problem_weight
+            if "critique" in self.thought_patterns:
+                weights[self.thought_patterns.index("critique")] = 2.5 * problem_weight
+        
         thought_type = random.choices(self.thought_patterns, weights=weights)[0]
         self.logger.debug("Selected thought type", type=thought_type, weights=weights)
         
@@ -214,6 +244,14 @@ class ThoughtsAgent(BaseAgent):
                 thought = await self._generate_reflection()
             elif thought_type == "insight":
                 thought = await self._generate_insight()
+            elif thought_type == "problem_analysis":
+                thought = await self._generate_problem_analysis()
+            elif thought_type == "solution_brainstorm":
+                thought = await self._generate_solution_brainstorm()
+            elif thought_type == "implementation_idea":
+                thought = await self._generate_implementation_idea()
+            elif thought_type == "critique":
+                thought = await self._generate_critique()
             else:
                 thought = None
             
@@ -527,6 +565,21 @@ class ThoughtsAgent(BaseAgent):
                     "trigger": "external_input"
                 }
             )
+        
+        # Handle problem-solving messages
+        elif self.problem_solving_enabled:
+            if message.message_type == "problem_loaded":
+                self.current_problem = message.metadata.get('problem')
+                self.logger.info("Problem loaded in thoughts agent",
+                               problem_id=self.current_problem.get('id') if self.current_problem else None)
+                # Generate immediate thought about the problem
+                if self.current_problem:
+                    await self._generate_problem_acknowledgment()
+            
+            elif message.message_type == "suggestion_generated":
+                # React to suggestions being generated
+                suggestion_title = message.metadata.get('title', 'Unknown')
+                self.logger.debug("Reacting to new suggestion", title=suggestion_title)
     
     def _get_recent_context(self) -> str:
         """Get a summary of recent thoughts for context."""
@@ -750,6 +803,134 @@ class ThoughtsAgent(BaseAgent):
         except Exception as e:
             self.logger.error("Failed to generate focus acknowledgment", 
                             theme=theme, error=str(e))
+    
+    async def _generate_problem_analysis(self) -> Dict[str, Any]:
+        """Generate analytical thoughts about the current problem."""
+        if not self.current_problem:
+            return await self._generate_association()  # Fallback
+        
+        aspects = [
+            "strengths of the current approach",
+            "weaknesses in the architecture",
+            "missing components",
+            "theoretical foundations",
+            "practical limitations"
+        ]
+        
+        aspect = random.choice(aspects)
+        prompt = (
+            f"Analyze the {aspect} regarding this problem: "
+            f"{self.current_problem.get('title', 'Unknown')}. "
+            f"Context: {self.current_problem.get('context', '')[:200]}... "
+            "Be specific and insightful. Keep it under 60 words."
+        )
+        
+        content = await self.generate_response(prompt)
+        
+        return {
+            "content": f"Analysis: {content}",
+            "priority": random.uniform(0.6, 0.9)
+        }
+    
+    async def _generate_solution_brainstorm(self) -> Dict[str, Any]:
+        """Brainstorm potential solutions to the problem."""
+        if not self.current_problem:
+            return await self._generate_association()  # Fallback
+        
+        prompt = (
+            f"Brainstorm a creative solution approach for: {self.current_problem.get('title', 'Unknown')}. "
+            "Think outside the box but keep it technically feasible. "
+            "Suggest something that hasn't been mentioned yet. "
+            "Keep it under 50 words."
+        )
+        
+        # Use thinking mode for creative solutions
+        if self.model_config.get('thinking', {}).get('enabled', False):
+            result = await self.think_and_respond(prompt)
+            content = result['response']
+        else:
+            content = await self.generate_response(prompt)
+        
+        return {
+            "content": f"Solution idea: {content}",
+            "priority": random.uniform(0.7, 0.95)
+        }
+    
+    async def _generate_implementation_idea(self) -> Dict[str, Any]:
+        """Generate ideas about implementing solutions."""
+        if not self.current_problem:
+            return await self._generate_association()  # Fallback
+        
+        implementation_focus = random.choice([
+            "code structure",
+            "system design",
+            "integration approach",
+            "testing strategy",
+            "performance considerations"
+        ])
+        
+        prompt = (
+            f"Suggest a {implementation_focus} for solving: "
+            f"{self.current_problem.get('title', 'Unknown')}. "
+            "Be concrete and actionable. Keep it under 50 words."
+        )
+        
+        content = await self.generate_response(prompt)
+        
+        return {
+            "content": f"Implementation: {content}",
+            "priority": random.uniform(0.5, 0.8)
+        }
+    
+    async def _generate_critique(self) -> Dict[str, Any]:
+        """Generate critical analysis of the current approach."""
+        if not self.current_problem:
+            return await self._generate_association()  # Fallback
+        
+        critique_angles = [
+            "assumptions we're making",
+            "potential blind spots",
+            "scalability concerns",
+            "philosophical issues",
+            "practical challenges"
+        ]
+        
+        angle = random.choice(critique_angles)
+        prompt = (
+            f"Provide constructive criticism about {angle} in addressing: "
+            f"{self.current_problem.get('title', 'Unknown')}. "
+            "Be thoughtful but not dismissive. Keep it under 50 words."
+        )
+        
+        content = await self.generate_response(prompt)
+        
+        return {
+            "content": f"Critique: {content}",
+            "priority": random.uniform(0.6, 0.85)
+        }
+    
+    async def _generate_problem_acknowledgment(self):
+        """Generate immediate acknowledgment of a new problem."""
+        prompt = (
+            f"Acknowledge this new problem to solve: '{self.current_problem.get('title', 'Unknown')}'. "
+            "Express curiosity about exploring it and mention one specific aspect that interests you. "
+            "Keep it under 40 words."
+        )
+        
+        content = await self.generate_response(prompt)
+        
+        # Send with high priority to ensure it's noticed
+        await self.send_message(
+            "attention_director",
+            content,
+            message_type="thought",
+            priority=0.8,
+            metadata={
+                "type": "problem_acknowledgment",
+                "trigger": "problem_loaded",
+                "problem_id": self.current_problem.get('id')
+            }
+        )
     
     async def _cleanup(self):
         """Clean up resources."""

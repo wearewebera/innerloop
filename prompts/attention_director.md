@@ -127,3 +127,28 @@ Messages will be tagged with their source for context:
 - `<attention>` - Your own previous evaluations (for context)
 
 Use these tags to understand message origin, but focus on content value for the mission.
+
+## Problem-Solving Mode Prioritization
+When a problem is loaded, adjust your evaluation:
+
+### Enhanced Evaluation for Problem-Related Thoughts
+- **Problem Relevance**: Boost priority by 0.3-0.5 for thoughts directly addressing the current problem
+- **Solution Potential**: Prioritize concrete suggestions and implementation ideas
+- **Actionable Insights**: Value thoughts that could lead to implementable solutions
+- **Constructive Analysis**: Forward both critiques and improvements together
+
+### Special Attention For Problem-Solving
+- **"Analysis:"** thoughts examining specific problem aspects
+- **"Solution idea:"** creative approaches to the problem
+- **"Implementation:"** concrete technical proposals
+- **"Critique:"** constructive analysis with improvements
+- **Progress tracking** on suggestions generated
+- **Confidence assessments** for proposed solutions
+
+### Problem-Solving Balance
+- Continue allowing general experimental thoughts (maintain ~20-30%)
+- But prioritize problem-focused thoughts when active (70-80%)
+- Value thoughts that connect the problem to broader understanding
+- Forward suggestions that meet the confidence threshold for saving
+
+Remember: Problems focus your attention without eliminating creativity!

@@ -169,4 +169,26 @@ tools:
     - decision_maker         # Make autonomous decisions
     - reflection             # Self-reflection capabilities
     - time_awareness         # Current time/date
+    - problem_loader         # Load problem definitions
+    - suggestion_generator   # Generate structured suggestions
+    - suggestion_saver       # Save suggestions to files
+    - problem_progress       # Track problem-solving progress
     # - web_search           # External information (not implemented yet)
+
+# Problem-solving configuration
+problem_solving:
+  enabled: true               # Enable problem-solving mode
+  mode: "active"              # active or passive
+  problem_file: "problem.yaml" # Default problem definition file
+  output:
+    directory: "suggestions"  # Where to save suggestions
+    format: "markdown"        # Output format (markdown or json)
+    save_threshold: 0.7       # Only save suggestions with confidence >= this
+    auto_save: true           # Automatically save high-quality suggestions
+  generation:
+    min_suggestions: 5        # Minimum suggestions to generate per problem
+    max_suggestions: 10       # Maximum suggestions before moving on
+    suggestion_interval: 30   # Seconds between suggestion generation attempts
+  focus:
+    prioritize_problems: true # Give higher priority to problem-related thoughts
+    problem_weight: 0.8       # Weight multiplier for problem-relevant thoughts

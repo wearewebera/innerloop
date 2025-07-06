@@ -11,6 +11,10 @@ from tools.memory_tools import MemorySearchTool, MemoryStoreTool
 from tools.decision_tools import DecisionMakerTool
 from tools.reflection_tools import ReflectionTool
 from tools.time_tools import TimeAwarenessTool
+from tools.problem_solving_tools import (
+    ProblemLoaderTool, SuggestionGeneratorTool, 
+    SuggestionSaverTool, ProblemProgressTool
+)
 
 logger = structlog.get_logger()
 
@@ -53,6 +57,14 @@ class ExperiencerAgent(BaseAgent):
         self.last_mission_check = datetime.now()
         self.autonomous_share_interval = 25  # Share experiments every 25 seconds when idle
         
+        # Problem-solving configuration
+        self.problem_config = self.config.get('problem_solving', {})
+        self.problem_solving_enabled = self.problem_config.get('enabled', False)
+        self.current_problem = None
+        self.problem_suggestions = []
+        self.last_suggestion_time = datetime.now()
+        self.suggestion_interval = self.problem_config.get('generation', {}).get('suggestion_interval', 30)
+        
         # Initialize tool registry if tools are enabled
         if self.config.get('tools', {}).get('enabled', False):
             self.tool_registry = ToolRegistry(config)
@@ -67,6 +79,14 @@ class ExperiencerAgent(BaseAgent):
         self.tool_registry.register_tool(ReflectionTool(self.agent_id, self.memory_store))
         self.tool_registry.register_tool(TimeAwarenessTool(self.agent_id))
         
+        # Register problem-solving tools if enabled
+        if self.problem_solving_enabled:
+            self.tool_registry.register_tool(ProblemLoaderTool(self.agent_id))
+            self.tool_registry.register_tool(SuggestionGeneratorTool(self.agent_id))
+            output_dir = self.problem_config.get('output', {}).get('directory', 'suggestions')
+            self.tool_registry.register_tool(SuggestionSaverTool(self.agent_id, output_dir))
+            self.tool_registry.register_tool(ProblemProgressTool(self.agent_id))
+        
         self.logger.info("Tools registered", 
                         tools=list(t.name for t in self.tool_registry.get_all_tools()))
     
@@ -80,6 +100,32 @@ class ExperiencerAgent(BaseAgent):
         # Initialize tool registry if present
         if hasattr(self, 'tool_registry'):
             await self.tool_registry.initialize(self.agent_id)
+        
+        # Load problem if problem-solving is enabled
+        if self.problem_solving_enabled and hasattr(self, 'tool_registry'):
+            problem_loader = self.tool_registry.get_tool('problem_loader')
+            if problem_loader:
+                problem_file = self.problem_config.get('problem_file', 'problem.yaml')
+                result = await problem_loader(problem_file=problem_file)
+                if result and result.get('success'):
+                    self.current_problem = result.get('result', {}).get('problem')
+                    if self.current_problem:
+                        self.logger.info("Loaded problem", 
+                                       problem_id=self.current_problem.get('id'),
+                                       title=self.current_problem.get('title'))
+                        # Add problem context
+                        self.current_context.append({
+                            "role": "system",
+                            "content": f"Current problem to solve: {self.current_problem.get('title')}\n"
+                                     f"Description: {self.current_problem.get('description')}"
+                        })
+                        # Notify other agents
+                        await self.send_message(
+                            "topic:problem_solving",
+                            "Problem loaded",
+                            message_type="problem_loaded",
+                            metadata={"problem": self.current_problem}
+                        )
         
         # Load recent conversation history
         recent_memories = await self.retrieve_memories("recent conversation", limit=10)
@@ -123,6 +169,11 @@ class ExperiencerAgent(BaseAgent):
                 await self._check_mission_progress()
                 await self._maybe_start_experiment()
                 await self._maybe_share_experiment_results()
+                
+                # Problem-solving activities if enabled
+                if self.problem_solving_enabled and self.current_problem:
+                    await self._maybe_generate_suggestion()
+                    await self._check_problem_progress()
                 
                 # Maybe share high-priority thoughts spontaneously
                 if hasattr(self, '_high_priority_thoughts') and self._high_priority_thoughts:
@@ -813,9 +864,153 @@ class ExperiencerAgent(BaseAgent):
         self.logger.info("Experiencer waking up", 
                         experiments_to_resume=len(self.active_experiments))
     
+    async def _maybe_generate_suggestion(self):
+        """Generate a suggestion for the current problem if it's time."""
+        now = datetime.now()
+        time_since_last = (now - self.last_suggestion_time).total_seconds()
+        
+        if time_since_last < self.suggestion_interval:
+            return
+        
+        # Check if we have enough suggestions
+        min_suggestions = self.problem_config.get('generation', {}).get('min_suggestions', 5)
+        max_suggestions = self.problem_config.get('generation', {}).get('max_suggestions', 10)
+        
+        if len(self.problem_suggestions) >= max_suggestions:
+            return
+        
+        self.logger.info("Generating problem suggestion",
+                        problem_id=self.current_problem.get('id'),
+                        suggestions_so_far=len(self.problem_suggestions))
+        
+        # Analyze the problem and generate a suggestion
+        analysis_prompt = f"""
+Analyze this problem and generate a specific, actionable suggestion:
+
+Problem: {self.current_problem.get('title')}
+Description: {self.current_problem.get('description')}
+Context: {self.current_problem.get('context', '')}
+
+Questions to explore:
+{chr(10).join('- ' + q for q in self.current_problem.get('questions_to_explore', []))}
+
+Based on your analysis, generate ONE specific suggestion that addresses an aspect of this problem.
+Focus on: architectural improvements, behavioral changes, or implementation strategies.
+Be concrete and actionable.
+"""
+        
+        # Use thinking mode for deeper analysis
+        result = await self.think_and_respond(analysis_prompt, self.current_context)
+        suggestion_content = result['response']
+        thinking = result['thinking']
+        
+        # Generate a title for the suggestion
+        title_prompt = f"Create a brief, descriptive title (5-10 words) for this suggestion: {suggestion_content[:200]}..."
+        title = await self.generate_response(title_prompt)
+        
+        # Determine suggestion type based on content
+        if "architecture" in suggestion_content.lower() or "structure" in suggestion_content.lower():
+            suggestion_type = "improvement"
+        elif "implement" in suggestion_content.lower() or "add" in suggestion_content.lower():
+            suggestion_type = "solution"
+        else:
+            suggestion_type = "analysis"
+        
+        # Calculate confidence based on thinking depth
+        confidence = min(0.9, 0.5 + (len(thinking) / 1000) * 0.2)  # Base 0.5, up to 0.9
+        
+        # Extract implementation steps if present
+        steps_prompt = f"""
+Extract 3-5 specific implementation steps from this suggestion:
+{suggestion_content}
+
+Format as a numbered list. If no clear steps exist, suggest logical next actions.
+"""
+        steps_response = await self.generate_response(steps_prompt)
+        implementation_steps = [step.strip() for step in steps_response.split('\n') if step.strip() and step[0].isdigit()]
+        
+        # Use suggestion generator tool
+        if hasattr(self, 'tool_registry'):
+            generator_tool = self.tool_registry.get_tool('suggestion_generator')
+            if generator_tool:
+                result = await generator_tool(
+                    problem_id=self.current_problem.get('id'),
+                    suggestion_type=suggestion_type,
+                    title=title.strip(),
+                    content=suggestion_content,
+                    confidence=confidence,
+                    implementation_steps=implementation_steps
+                )
+                
+                if result.get('success'):
+                    suggestion = result.get('suggestion')
+                    self.problem_suggestions.append(suggestion)
+                    
+                    # Save if confidence is high enough
+                    save_threshold = self.problem_config.get('output', {}).get('save_threshold', 0.7)
+                    if confidence >= save_threshold and self.problem_config.get('output', {}).get('auto_save', True):
+                        saver_tool = self.tool_registry.get_tool('suggestion_saver')
+                        if saver_tool:
+                            format = self.problem_config.get('output', {}).get('format', 'markdown')
+                            save_result = await saver_tool(
+                                suggestion=suggestion,
+                                format=format
+                            )
+                            if save_result.get('success'):
+                                self.logger.info("Suggestion saved",
+                                              filepath=save_result.get('filepath'))
+                    
+                    # Share the suggestion
+                    if hasattr(self, 'spontaneous_share_callback'):
+                        share_message = f"💡 New suggestion for {self.current_problem.get('title')}: {title}"
+                        await self.spontaneous_share_callback(share_message)
+        
+        self.last_suggestion_time = now
+    
+    async def _check_problem_progress(self):
+        """Check and report progress on the current problem."""
+        # Only check periodically
+        if len(self.problem_suggestions) == 0 or len(self.problem_suggestions) % 3 != 0:
+            return
+        
+        if hasattr(self, 'tool_registry'):
+            progress_tool = self.tool_registry.get_tool('problem_progress')
+            if progress_tool:
+                # Analyze what areas we've covered
+                areas_analyzed = set()
+                for suggestion in self.problem_suggestions:
+                    if "architecture" in suggestion.get('content', '').lower():
+                        areas_analyzed.add("architecture")
+                    if "behavior" in suggestion.get('content', '').lower():
+                        areas_analyzed.add("behavior")
+                    if "implementation" in suggestion.get('content', '').lower():
+                        areas_analyzed.add("implementation")
+                    if "consciousness" in suggestion.get('content', '').lower():
+                        areas_analyzed.add("consciousness modeling")
+                
+                # Determine next steps
+                next_steps = []
+                questions = self.current_problem.get('questions_to_explore', [])
+                for question in questions:
+                    covered = any(keyword in ' '.join(s.get('content', '') for s in self.problem_suggestions).lower() 
+                                for keyword in question.lower().split())
+                    if not covered:
+                        next_steps.append(f"Explore: {question}")
+                
+                result = await progress_tool(
+                    problem_id=self.current_problem.get('id'),
+                    suggestions_generated=len(self.problem_suggestions),
+                    areas_analyzed=list(areas_analyzed),
+                    next_steps=next_steps[:3]  # Top 3 next steps
+                )
+                
+                if result.get('success'):
+                    self.logger.info("Problem progress",
+                                   completion=result.get('completion_percentage'))
+    
     def get_status(self) -> Dict[str, Any]:
         """Get current agent status."""
-        return {
+        status = {
             **self.get_metrics(),
             "is_processing": self.is_processing,
             "is_sleeping": self.is_sleeping,
@@ -825,3 +1020,13 @@ class ExperiencerAgent(BaseAgent):
             "queued_messages": len(self.pending_user_messages),
             "active_experiments": len(self.active_experiments)
         }
+        
+        # Add problem-solving status if enabled
+        if self.problem_solving_enabled:
+            status.update({
+                "current_problem": self.current_problem.get('id') if self.current_problem else None,
+                "suggestions_generated": len(self.problem_suggestions),
+                "problem_solving_active": bool(self.current_problem)
+            })
+        
+        return status
