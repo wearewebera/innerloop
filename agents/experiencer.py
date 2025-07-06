@@ -891,16 +891,16 @@ class ExperiencerAgent(BaseAgent):
             # Check if we have enough suggestions
             min_suggestions = self.problem_config.get('generation', {}).get('min_suggestions', 5)
             max_suggestions = self.problem_config.get('generation', {}).get('max_suggestions', 10)
+            
+            if len(self.problem_suggestions) >= max_suggestions:
+                return
         
-        if len(self.problem_suggestions) >= max_suggestions:
-            return
-        
-        self.logger.info("Generating problem suggestion",
-                        problem_id=self.current_problem.get('id'),
-                        suggestions_so_far=len(self.problem_suggestions))
-        
-        # Analyze the problem and generate a suggestion
-        analysis_prompt = f"""
+            self.logger.info("Generating problem suggestion",
+                            problem_id=self.current_problem.get('id'),
+                            suggestions_so_far=len(self.problem_suggestions))
+            
+            # Analyze the problem and generate a suggestion
+            analysis_prompt = f"""
 Analyze this problem and generate a specific, actionable suggestion:
 
 Problem: {self.current_problem.get('title')}
@@ -914,82 +914,82 @@ Based on your analysis, generate ONE specific suggestion that addresses an aspec
 Focus on: architectural improvements, behavioral changes, or implementation strategies.
 Be concrete and actionable.
 """
-        
-        # Use thinking mode for deeper analysis if available
-        if self.model_config.get('thinking', {}).get('enabled', False):
-            result = await self.think_and_respond(analysis_prompt, self.current_context)
-            suggestion_content = result['response']
-            thinking = result.get('thinking', '')
-        else:
-            # Fallback to regular response
-            suggestion_content = await self.generate_response(analysis_prompt, self.current_context)
-            thinking = ""
-        
-        # Generate a title for the suggestion
-        title_prompt = f"Create a brief, descriptive title (5-10 words) for this suggestion: {suggestion_content[:200]}..."
-        title = await self.generate_response(title_prompt)
-        
-        # Determine suggestion type based on content
-        if "architecture" in suggestion_content.lower() or "structure" in suggestion_content.lower():
-            suggestion_type = "improvement"
-        elif "implement" in suggestion_content.lower() or "add" in suggestion_content.lower():
-            suggestion_type = "solution"
-        else:
-            suggestion_type = "analysis"
-        
-        # Calculate confidence based on thinking depth
-        confidence = min(0.9, 0.5 + (len(thinking) / 1000) * 0.2)  # Base 0.5, up to 0.9
-        
-        # Extract implementation steps if present
-        steps_prompt = f"""
+            
+            # Use thinking mode for deeper analysis if available
+            if self.model_config.get('thinking', {}).get('enabled', False):
+                result = await self.think_and_respond(analysis_prompt, self.current_context)
+                suggestion_content = result['response']
+                thinking = result.get('thinking', '')
+            else:
+                # Fallback to regular response
+                suggestion_content = await self.generate_response(analysis_prompt, self.current_context)
+                thinking = ""
+            
+            # Generate a title for the suggestion
+            title_prompt = f"Create a brief, descriptive title (5-10 words) for this suggestion: {suggestion_content[:200]}..."
+            title = await self.generate_response(title_prompt)
+            
+            # Determine suggestion type based on content
+            if "architecture" in suggestion_content.lower() or "structure" in suggestion_content.lower():
+                suggestion_type = "improvement"
+            elif "implement" in suggestion_content.lower() or "add" in suggestion_content.lower():
+                suggestion_type = "solution"
+            else:
+                suggestion_type = "analysis"
+            
+            # Calculate confidence based on thinking depth
+            confidence = min(0.9, 0.5 + (len(thinking) / 1000) * 0.2)  # Base 0.5, up to 0.9
+            
+            # Extract implementation steps if present
+            steps_prompt = f"""
 Extract 3-5 specific implementation steps from this suggestion:
 {suggestion_content}
 
 Format as a numbered list. If no clear steps exist, suggest logical next actions.
 """
-        steps_response = await self.generate_response(steps_prompt)
-        implementation_steps = [step.strip() for step in steps_response.split('\n') if step.strip() and step[0].isdigit()]
-        
-        # Use suggestion generator tool
-        if hasattr(self, 'tool_registry'):
-            generator_tool = self.tool_registry.get_tool('suggestion_generator')
-            if generator_tool:
-                result = await generator_tool(
+            steps_response = await self.generate_response(steps_prompt)
+            implementation_steps = [step.strip() for step in steps_response.split('\n') if step.strip() and step[0].isdigit()]
+            
+            # Use suggestion generator tool
+            if hasattr(self, 'tool_registry'):
+                generator_tool = self.tool_registry.get_tool('suggestion_generator')
+                if generator_tool:
+                    result = await generator_tool(
                     problem_id=self.current_problem.get('id'),
                     suggestion_type=suggestion_type,
                     title=title.strip(),
                     content=suggestion_content,
                     confidence=confidence,
                     implementation_steps=implementation_steps
-                )
-                
-                if result and result.get('success'):
-                    suggestion = result.get('result', {}).get('suggestion')
-                    if suggestion:
-                        self.problem_suggestions.append(suggestion)
-                    else:
-                        self.logger.warning("Generator tool returned success but no suggestion")
+                    )
                     
-                    # Save if confidence is high enough
-                    save_threshold = self.problem_config.get('output', {}).get('save_threshold', 0.7)
-                    if confidence >= save_threshold and self.problem_config.get('output', {}).get('auto_save', True):
-                        saver_tool = self.tool_registry.get_tool('suggestion_saver')
-                        if saver_tool:
-                            format = self.problem_config.get('output', {}).get('format', 'markdown')
-                            save_result = await saver_tool(
-                                suggestion=suggestion,
-                                format=format
-                            )
-                            if save_result.get('success'):
-                                self.logger.info("Suggestion saved",
-                                              filepath=save_result.get('filepath'))
-                    
-                    # Share the suggestion
-                    if hasattr(self, 'spontaneous_share_callback'):
-                        share_message = f"💡 New suggestion for {self.current_problem.get('title')}: {title}"
-                        await self.spontaneous_share_callback(share_message)
-        
-        self.last_suggestion_time = now
+                    if result and result.get('success'):
+                        suggestion = result.get('result', {}).get('suggestion')
+                        if suggestion:
+                            self.problem_suggestions.append(suggestion)
+                        else:
+                            self.logger.warning("Generator tool returned success but no suggestion")
+                        
+                        # Save if confidence is high enough
+                        save_threshold = self.problem_config.get('output', {}).get('save_threshold', 0.7)
+                        if confidence >= save_threshold and self.problem_config.get('output', {}).get('auto_save', True):
+                            saver_tool = self.tool_registry.get_tool('suggestion_saver')
+                            if saver_tool:
+                                format = self.problem_config.get('output', {}).get('format', 'markdown')
+                                save_result = await saver_tool(
+                                    suggestion=suggestion,
+                                    format=format
+                                )
+                                if save_result.get('success'):
+                                    self.logger.info("Suggestion saved",
+                                                  filepath=save_result.get('filepath'))
+                        
+                        # Share the suggestion
+                        if hasattr(self, 'spontaneous_share_callback'):
+                            share_message = f"💡 New suggestion for {self.current_problem.get('title')}: {title}"
+                            await self.spontaneous_share_callback(share_message)
+            
+            self.last_suggestion_time = now
         
         except Exception as e:
             self.logger.error("Failed to generate suggestion",
