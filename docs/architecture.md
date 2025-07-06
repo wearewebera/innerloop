@@ -92,3 +92,68 @@ innerloop/
 ├── requirements.txt          # Python dependencies
 └── README.md                 # This file
 ```
+## Message Flow & Tagging
+
+All messages in the system are now tagged with their source for clarity:
+
+### Message Source Tags
+- **`<human>`** - External user messages
+- **`<thoughts>`** - Autonomous thoughts from the Thoughts agent  
+- **`<attention>`** - Filtered content from Attention Director
+- **`<experiencer>`** - Experiencer's own messages or reflections
+- **`<sleep>`** - Sleep cycle notifications
+
+### Context Management
+- Each agent maintains a configurable context window (default: 100 messages)
+- System prompts are always preserved at the start of the context
+- Thinking processes are kept separate from conversation context
+- Full model context capacity (128K tokens) is utilized
+
+### Human Responsiveness
+- Queue evaluation every 2 seconds (was 5 seconds)
+- Maximum wait time of 60 seconds guarantees response
+- Priority boost for messages waiting longer
+- Contextual evaluation for immediate processing
+
+## Logging & Debugging
+
+### Context Logging
+Each agent logs its full context to text files:
+- `logs/experiencer.log` - Primary consciousness context
+- `logs/thoughts.log` - Autonomous thought generation
+- `logs/attention_director.log` - Attention filtering decisions
+- `logs/sleep_agent.log` - Sleep cycle activities
+
+### Log Format
+```
+[2025-07-06T12:34:56] [USER]
+<human>
+What are you thinking about?
+</human>
+================================================================================
+
+[2025-07-06T12:34:58] [ASSISTANT]
+I'm currently experimenting with the concept of emergence...
+================================================================================
+```
+
+## Configuration
+
+Key settings in `config.yaml`:
+
+```yaml
+model:
+  num_ctx: 128000           # Use full context window
+
+experiencer:
+  context_window_size: 100  # Messages to keep in memory
+  queue_evaluation_interval: 2
+  max_queue_wait: 60
+
+thoughts:
+  thoughts_per_minute: 2
+
+agent_context_logging:
+  enabled: true
+  directory: "logs"
+```
