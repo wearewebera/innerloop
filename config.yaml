@@ -38,34 +38,42 @@ agents:
     response_style: "thoughtful and engaging"
   
   stream_generator:
-    role: "background thought generator"  
-    thoughts_per_minute: 1    # Reduced from 3 - one thought per minute
+    role: "autonomous experimental thought laboratory"  
+    thoughts_per_minute: 2    # Increased for more active experimentation
     context_window: 10        # Number of recent memories to consider
-    creativity_boost: 0.2     # Additional temperature for variety
+    creativity_boost: 0.3     # Higher creativity for experimentation
     # Adaptive frequency settings
     adaptive_frequency:
       enabled: true
-      conversation_active_multiplier: 0.5  # Half rate during active conversation
-      idle_multiplier: 1.5                 # 1.5x rate when idle for 5+ minutes
-      min_thoughts_per_minute: 0.3         # Never go below 1 thought per 3 minutes
-      max_thoughts_per_minute: 2.0         # Never exceed 2 thoughts per minute
+      conversation_active_multiplier: 0.8  # Maintain high activity during conversation
+      idle_multiplier: 1.2                 # Slightly higher when alone (prime experiment time)
+      min_thoughts_per_minute: 1.0         # Never go below 1 thought per minute
+      max_thoughts_per_minute: 3.0         # Allow up to 3 thoughts per minute
     # Conversation awareness settings
     conversation_awareness:
       enabled: true
-      influence_strength: 0.25   # How much conversations affect thought generation (0-1)
-      update_interval: 45        # Seconds between conversation theme updates
+      influence_strength: 0.1    # Minimal conversation influence
+      update_interval: 60        # Less frequent updates
       theme_extraction: true     # Extract abstract themes vs raw content
       maintain_autonomy: true    # Ensure thoughts remain independent
+    # Mission-focused settings
+    mission_focus:
+      experiment_probability: 0.4   # 40% of thoughts should be active experiments
+      hypothesis_probability: 0.3   # 30% should form/test hypotheses
+      building_probability: 0.3     # 30% should track building progress
   
   attention_director:
-    role: "attention and priority manager"
-    priority_threshold: 0.3   # Minimum score to pass to experiencer
-    attention_budget: 5       # Max items to process per cycle
+    role: "mission-focused attention curator"
+    priority_threshold: 0.25  # Lower threshold for experimental thoughts
+    attention_budget: 6       # Process more items per cycle
     evaluation_criteria:
-      relevance: 0.4
-      urgency: 0.3
-      novelty: 0.2
-      emotional_significance: 0.1
+      mission_alignment: 0.4
+      experimental_value: 0.3
+      learning_potential: 0.15
+      teaching_opportunity: 0.1
+      creative_novelty: 0.05
+    # External input handling
+    external_input_boost: 1.2  # Reduced from default 1.5x
 
 memory:
   chromadb:
@@ -112,11 +120,11 @@ performance:
 
 # Organic focus emergence settings
 focus:
-  persistence_threshold: 180   # Seconds a theme needs attention before becoming focus (3 min)
-  decay_rate: 0.85            # How fast focus decays without reinforcement per minute
-  multi_focus_limit: 2        # Maximum simultaneous focus areas
-  clustering_threshold: 0.7   # Semantic similarity threshold for theme clustering
-  min_priority_for_focus: 0.6 # Minimum thought priority to contribute to focus emergence
+  persistence_threshold: 120   # Reduced to 2 minutes for faster focus emergence
+  decay_rate: 0.9             # Slower decay to maintain experimental momentum
+  multi_focus_limit: 3        # Allow more parallel experiments
+  clustering_threshold: 0.65  # Slightly lower for broader focus areas
+  min_priority_for_focus: 0.4 # Lower threshold for experimental thoughts
 
 # Tool calling configuration
 tools:

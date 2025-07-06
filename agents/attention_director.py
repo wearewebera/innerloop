@@ -175,17 +175,8 @@ class AttentionDirectorAgent(BaseAgent):
             # Calculate evaluation scores
             scores = await self._calculate_attention_scores(message)
             
-            # Dynamic criteria based on whether we have focus areas
-            if 'focus_relevance' in scores and scores['focus_relevance'] > 0:
-                evaluation_criteria = {
-                    'focus_relevance': 0.4,
-                    'relevance': 0.25,
-                    'urgency': 0.2,
-                    'novelty': 0.1,
-                    'emotional_significance': 0.05
-                }
-            else:
-                evaluation_criteria = self.evaluation_criteria
+            # Use mission-focused evaluation criteria
+            evaluation_criteria = self.evaluation_criteria
             
             # Weighted sum of criteria
             final_priority = 0.0
@@ -195,9 +186,10 @@ class AttentionDirectorAgent(BaseAgent):
             # Blend with base priority
             final_priority = (final_priority + base_priority) / 2
             
-            # External inputs get a boost
+            # External inputs get a smaller boost (reduced from 1.5x)
+            external_boost = self.agent_config.get('external_input_boost', 1.2)
             if message.message_type == "external":
-                final_priority = min(1.0, final_priority * 1.5)
+                final_priority = min(1.0, final_priority * external_boost)
             
             self.logger.debug("Evaluated message",
                             sender=message.sender,
@@ -241,71 +233,75 @@ class AttentionDirectorAgent(BaseAgent):
         """Calculate individual attention criteria scores."""
         scores = {}
         
+        # Mission Alignment - highest priority criterion
+        mission_keywords = [
+            'experiment', 'hypothesis', 'building', 'constructing', 'testing',
+            'discovered', 'understanding', 'framework', 'model', 'creating',
+            'exploring', 'investigating', 'analyzing', 'designing', 'teaching'
+        ]
+        
+        content_lower = message.content.lower()
+        
+        # Check for mission-aligned metadata
+        metadata_type = message.metadata.get('type', '')
+        if metadata_type in ['hypothesis', 'active_experiment', 'building_progress', 
+                           'mission_assessment', 'teaching_prep']:
+            scores['mission_alignment'] = 0.9
+        else:
+            # Count mission keywords
+            mission_word_count = sum(1 for word in mission_keywords if word in content_lower)
+            base_mission_score = min(1.0, mission_word_count * 0.25)
+            
+            # Boost for active experimentation language
+            if any(phrase in content_lower for phrase in [
+                "i'm testing", "experimenting with", "building a", "hypothesis:",
+                "let me try", "running experiment", "framework for"
+            ]):
+                base_mission_score = min(1.0, base_mission_score + 0.3)
+            
+            scores['mission_alignment'] = base_mission_score
+        
+        # Experimental Value - testable ideas and active experiments
+        if any(phrase in content_lower for phrase in [
+            "what if", "test:", "method:", "experimenting", "hypothesis",
+            "let's try", "building:", "constructing"
+        ]):
+            scores['experimental_value'] = 0.8
+        elif metadata_type in ['hypothesis', 'active_experiment']:
+            scores['experimental_value'] = 0.9
+        else:
+            scores['experimental_value'] = 0.3
+        
+        # Learning Potential - ability to build on ideas
+        if message.metadata.get('constructive', False) or message.metadata.get('testable', False):
+            scores['learning_potential'] = 0.8
+        elif any(word in content_lower for word in ['realized', 'discovered', 'pattern', 'insight']):
+            scores['learning_potential'] = 0.7
+        else:
+            scores['learning_potential'] = 0.4
+        
+        # Teaching Opportunity - can this be shared effectively
+        if message.metadata.get('pedagogical', False) or "teaching moment:" in content_lower:
+            scores['teaching_opportunity'] = 0.9
+        elif any(phrase in content_lower for phrase in ['analogy', 'example', 'like a', 'similar to']):
+            scores['teaching_opportunity'] = 0.7
+        else:
+            scores['teaching_opportunity'] = 0.3
+        
+        # Creative Novelty - unexpected connections
+        scores['creative_novelty'] = self._calculate_novelty(message.content)
+        
         # Focus relevance - check against active focus areas
-        focus_relevance = 0.0
         if self.focus_areas:
             # Get relevance scores from all active focus areas
             relevance_scores = [focus.get_relevance_score(message.content) for focus in self.focus_areas]
             focus_relevance = max(relevance_scores) if relevance_scores else 0.0
             
-            # Boost if highly relevant to intense focus
-            if relevance_scores:
-                most_relevant_focus = self.focus_areas[relevance_scores.index(max(relevance_scores))]
-                if most_relevant_focus.intensity > 0.7:
-                    focus_relevance = min(1.0, focus_relevance * 1.3)
-        
-        # Add focus relevance to scores
-        if focus_relevance > 0:
-            scores['focus_relevance'] = focus_relevance
-        
-        # General relevance - based on current focus and recent context
-        if self.current_focus:
-            relevance_prompt = (
-                f"Rate the relevance of this thought to our current focus "
-                f"('{self.current_focus}'): '{message.content}'\n"
-                "Consider both direct and indirect connections. "
-                "Respond with just a number between 0 and 1."
-            )
+            # Boost mission-aligned thoughts that relate to focus
+            if focus_relevance > 0.5 and scores['mission_alignment'] > 0.5:
+                focus_relevance = min(1.0, focus_relevance * 1.2)
             
-            # Use thinking for complex relevance evaluation
-            if self.model_config.get('thinking', {}).get('enabled', False) and len(message.content) > 50:
-                try:
-                    result = await self.think_and_respond(relevance_prompt)
-                    relevance_str = result['response'].strip()
-                    
-                    # Log reasoning for high-stakes evaluations
-                    if result.get('thinking'):
-                        self.logger.debug("Relevance evaluation reasoning",
-                                        preview=result['thinking'][:100])
-                    
-                    scores['relevance'] = float(relevance_str)
-                except:
-                    scores['relevance'] = 0.5
-            else:
-                try:
-                    relevance = await self.generate_response(relevance_prompt)
-                    scores['relevance'] = float(relevance.strip())
-                except:
-                    scores['relevance'] = 0.5
-        else:
-            scores['relevance'] = 0.5
-        
-        # Urgency - external inputs and time-sensitive thoughts
-        if message.message_type == "external":
-            scores['urgency'] = 0.9
-        elif "now" in message.content.lower() or "urgent" in message.content.lower():
-            scores['urgency'] = 0.7
-        else:
-            scores['urgency'] = 0.3
-        
-        # Novelty - how different from recent thoughts
-        scores['novelty'] = self._calculate_novelty(message.content)
-        
-        # Emotional significance
-        emotional_words = ['feel', 'felt', 'happy', 'sad', 'worried', 'excited', 
-                          'love', 'fear', 'hope', 'wonder']
-        word_count = sum(1 for word in emotional_words if word in message.content.lower())
-        scores['emotional_significance'] = min(1.0, word_count * 0.2)
+            scores['focus_relevance'] = focus_relevance
         
         return scores
     

@@ -36,6 +36,13 @@ class ExperiencerAgent(BaseAgent):
         self.last_user_interaction = datetime.now()
         self.idle_notification_sent = False
         
+        # Mission-focused tracking
+        self.active_experiments = []
+        self.experiment_results = []
+        self.last_experiment_share = datetime.now()
+        self.last_mission_check = datetime.now()
+        self.autonomous_share_interval = 25  # Share experiments every 25 seconds when idle
+        
         # Initialize tool registry if tools are enabled
         if self.config.get('tools', {}).get('enabled', False):
             self.tool_registry = ToolRegistry(config)
@@ -97,6 +104,11 @@ class ExperiencerAgent(BaseAgent):
                 
                 # Check for idle conversation state
                 await self._check_idle_state()
+                
+                # Mission-focused activities
+                await self._check_mission_progress()
+                await self._maybe_start_experiment()
+                await self._maybe_share_experiment_results()
                 
                 # Maybe share high-priority thoughts spontaneously
                 if hasattr(self, '_high_priority_thoughts') and self._high_priority_thoughts:
@@ -191,8 +203,9 @@ class ExperiencerAgent(BaseAgent):
             
             # Generate response with thinking and tools
             prompt = (
-                "Respond to the user naturally, incorporating any relevant thoughts "
-                "or memories that have surfaced. Be genuine and engaging. "
+                "Frame your response around your ongoing experiments and discoveries. "
+                "Share what you've been building and exploring. Invite the user into "
+                "your current experimental work. Be genuine and engaging. "
                 "You may use tools if they would enhance your response."
             )
             
@@ -412,6 +425,124 @@ class ExperiencerAgent(BaseAgent):
         
         return is_complex_question or has_multiple_parts or is_long_input
     
+    async def _check_mission_progress(self):
+        """Periodically check progress toward mission goals."""
+        now = datetime.now()
+        if (now - self.last_mission_check).total_seconds() < 180:  # Every 3 minutes
+            return
+            
+        self.last_mission_check = now
+        
+        # Generate internal mission assessment
+        mission_prompt = (
+            "Assess my progress toward understanding the world through building and experimenting. "
+            "What have I successfully built or discovered recently? What experiments are ongoing? "
+            "What should I explore next? Be specific and action-oriented."
+        )
+        
+        assessment = await self.generate_response(mission_prompt)
+        
+        # Broadcast mission status
+        await self.send_message(
+            "topic:mission",
+            f"Mission progress check: {assessment[:200]}...",
+            message_type="mission_update",
+            priority=0.8,
+            metadata={"full_assessment": assessment}
+        )
+        
+        self.logger.info("Mission progress checked", preview=assessment[:100])
+    
+    async def _maybe_start_experiment(self):
+        """Start new experiments during idle periods."""
+        # Only start experiments when not actively processing
+        if self.is_processing or len(self.active_experiments) >= 3:
+            return
+            
+        # Check if we should start a new experiment
+        idle_time = (datetime.now() - self.last_user_interaction).total_seconds()
+        if idle_time < 15:  # Wait at least 15 seconds
+            return
+            
+        # Use decision tool to identify experiment opportunity
+        if hasattr(self, 'tool_registry'):
+            decision_tool = self.tool_registry.get_tool('decision_maker')
+            if decision_tool:
+                decision = await decision_tool(
+                    decision_type="yes_no",
+                    context="Should I start a new thought experiment based on recent insights?",
+                    criteria=["novelty", "potential", "feasibility"]
+                )
+                
+                if decision.get('result', {}).get('decision') == 'yes':
+                    # Generate experiment
+                    experiment_prompt = (
+                        "Design a specific thought experiment to test a hypothesis or build understanding. "
+                        "Include: 1) The hypothesis, 2) The experimental method, 3) Expected outcomes. "
+                        "Focus on something you can mentally simulate or construct."
+                    )
+                    
+                    experiment = await self.generate_response(experiment_prompt)
+                    
+                    self.active_experiments.append({
+                        'hypothesis': experiment,
+                        'started': datetime.now(),
+                        'status': 'running'
+                    })
+                    
+                    # Notify stream generator
+                    await self.send_message(
+                        "stream_generator",
+                        f"Started experiment: {experiment[:100]}...",
+                        message_type="experiment_started",
+                        priority=0.7
+                    )
+                    
+                    self.logger.info("Started new experiment", preview=experiment[:100])
+    
+    async def _maybe_share_experiment_results(self):
+        """Share experimental discoveries autonomously."""
+        now = datetime.now()
+        idle_time = (now - self.last_user_interaction).total_seconds()
+        time_since_share = (now - self.last_experiment_share).total_seconds()
+        
+        # Share experiments when idle and enough time has passed
+        if idle_time < 20 or time_since_share < self.autonomous_share_interval:
+            return
+            
+        # Check if we have experiments or discoveries to share
+        if self.active_experiments or self.experiment_results:
+            # Format experimental insights
+            share_templates = [
+                "I've been experimenting with {topic} and discovered: {insight}",
+                "Fascinating result from my latest experiment: {insight}",
+                "While exploring {topic}, I built this understanding: {insight}",
+                "My hypothesis about {topic} led to an interesting finding: {insight}",
+                "I just tested whether {topic}, and here's what emerged: {insight}"
+            ]
+            
+            # Generate insight from recent work
+            if self.active_experiments:
+                experiment = self.active_experiments[0]
+                insight_prompt = f"Briefly share an insight from this experiment: {experiment['hypothesis'][:200]}"
+                insight = await self.generate_response(insight_prompt)
+                
+                import random
+                template = random.choice(share_templates)
+                
+                # Extract topic from hypothesis
+                topic_words = experiment['hypothesis'].split()[:5]
+                topic = ' '.join(topic_words) + '...'
+                
+                formatted_share = template.format(topic=topic, insight=insight)
+                
+                # Send to UI for display
+                if hasattr(self, 'spontaneous_share_callback'):
+                    await self.spontaneous_share_callback(formatted_share)
+                
+                self.last_experiment_share = now
+                self.logger.info("Shared experiment autonomously")
+    
     async def _maybe_share_thought(self, high_priority_thoughts: List[Dict[str, Any]]):
         """Share high-priority thoughts spontaneously during idle periods."""
         if not high_priority_thoughts:
@@ -421,9 +552,8 @@ class ExperiencerAgent(BaseAgent):
         now = datetime.now()
         idle_time = (now - self.last_user_interaction).total_seconds()
         
-        # Share thoughts at different intervals
-        # First thought after 30 seconds, then every 60-90 seconds
-        if idle_time < 30:
+        # Share thoughts more frequently - after 20 seconds
+        if idle_time < 20:
             return
             
         # Check if we've shared recently
@@ -446,13 +576,14 @@ class ExperiencerAgent(BaseAgent):
                 )
                 
                 if decision.get('result', {}).get('decision') == 'yes':
-                    # Format spontaneous thought
+                    # Format spontaneous thought with mission focus
                     templates = [
-                        "I've been thinking about: {thought}",
-                        "Something just occurred to me: {thought}",
-                        "You know, I was just considering: {thought}",
-                        "An interesting thought: {thought}",
-                        "I find myself pondering: {thought}"
+                        "I'm currently experimenting with: {thought}",
+                        "Just discovered while building: {thought}",
+                        "My latest hypothesis: {thought}",
+                        "Testing a new framework: {thought}",
+                        "Experimental insight: {thought}",
+                        "While constructing understanding of this: {thought}"
                     ]
                     
                     import random

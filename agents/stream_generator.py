@@ -49,17 +49,24 @@ class StreamGeneratorAgent(BaseAgent):
         self.conversation_active = False
         
         self.thought_patterns = [
+            "hypothesis",         # New: Form testable hypotheses
+            "experiment",         # New: Run active experiments
+            "building_progress",  # New: Track what's being built
+            "mission_progress",   # New: Assess mission advancement
             "association",
             "memory",
             "wonder",
             "observation",
             "reflection",
-            "insight"
+            "insight",
+            "teaching_prep"       # New: Prepare discoveries for teaching
         ]
         
-        # Add contextual drift as a new thought type when conversation aware
-        if self.conversation_awareness_enabled:
-            self.thought_patterns.append("contextual_drift")
+        # Mission-focused configuration
+        self.mission_config = self.agent_config.get('mission_focus', {})
+        self.experiment_probability = self.mission_config.get('experiment_probability', 0.4)
+        self.hypothesis_probability = self.mission_config.get('hypothesis_probability', 0.3)
+        self.building_probability = self.mission_config.get('building_probability', 0.3)
         
         # Timing
         self.last_thought_time = datetime.now()
@@ -87,6 +94,10 @@ class StreamGeneratorAgent(BaseAgent):
         self.message_bus.subscribe(self.agent_id, "focus_emergence")
         self.message_bus.subscribe(self.agent_id, "focus_shift")
         
+        # Subscribe to experiment notifications
+        self.message_bus.subscribe(self.agent_id, "experiment_started")
+        self.message_bus.subscribe(self.agent_id, "mission_update")
+        
         
         # Load some initial memories to seed thoughts
         initial_memories = await self.retrieve_memories("", limit=20)
@@ -107,6 +118,13 @@ class StreamGeneratorAgent(BaseAgent):
                 # Update adaptive frequency if enabled
                 if self.adaptive_enabled:
                     self._update_adaptive_frequency()
+                    
+                # Mission-focused: Increase frequency when alone
+                if not self.conversation_active:
+                    self.thoughts_per_minute = min(
+                        self.max_thoughts_per_minute,
+                        self.base_thoughts_per_minute * 1.3
+                    )
                 
                 # Generate thought if it's time
                 now = datetime.now()
@@ -141,31 +159,50 @@ class StreamGeneratorAgent(BaseAgent):
                          focus_areas_count=len(self.focus_areas),
                          conversation_themes_count=len(self.conversation_themes))
         
-        # Adjust thought type probabilities based on focus areas and conversation awareness
+        # Mission-focused thought generation weights
         weights = [1.0] * len(self.thought_patterns)
         
-        # If we have focus areas, strongly prefer related thoughts
+        # Always prioritize mission-aligned thoughts
+        if "hypothesis" in self.thought_patterns:
+            weights[self.thought_patterns.index("hypothesis")] = 3.0
+        if "experiment" in self.thought_patterns:
+            weights[self.thought_patterns.index("experiment")] = 3.5
+        if "building_progress" in self.thought_patterns:
+            weights[self.thought_patterns.index("building_progress")] = 2.5
+        if "mission_progress" in self.thought_patterns:
+            weights[self.thought_patterns.index("mission_progress")] = 2.0
+        if "teaching_prep" in self.thought_patterns:
+            weights[self.thought_patterns.index("teaching_prep")] = 2.0
+            
+        # If we have focus areas, further boost related experimental thoughts
         if self.focus_areas:
             # Boost association and observation for focus-related insights
             if "association" in self.thought_patterns:
-                weights[self.thought_patterns.index("association")] = 3.0
+                weights[self.thought_patterns.index("association")] *= 1.5
             if "observation" in self.thought_patterns:
-                weights[self.thought_patterns.index("observation")] = 2.5
-            if "reflection" in self.thought_patterns:
-                weights[self.thought_patterns.index("reflection")] = 2.0
+                weights[self.thought_patterns.index("observation")] *= 1.5
         
-        # Also consider conversation themes
-        elif self.conversation_awareness_enabled and self.conversation_themes:
-            # Increase chance of contextual thoughts when themes are available
-            if "contextual_drift" in self.thought_patterns:
-                drift_idx = self.thought_patterns.index("contextual_drift")
-                weights[drift_idx] = 2.0 * self.influence_strength
+        # Reduce conversation influence
+        if self.conversation_awareness_enabled and self.conversation_themes:
+            # Only slight influence from conversations
+            if "association" in self.thought_patterns:
+                weights[self.thought_patterns.index("association")] *= (1 + self.influence_strength)
         
         thought_type = random.choices(self.thought_patterns, weights=weights)[0]
         self.logger.debug("Selected thought type", type=thought_type, weights=weights)
         
         try:
-            if thought_type == "association":
+            if thought_type == "hypothesis":
+                thought = await self._generate_hypothesis()
+            elif thought_type == "experiment":
+                thought = await self._generate_experiment()
+            elif thought_type == "building_progress":
+                thought = await self._generate_building_progress()
+            elif thought_type == "mission_progress":
+                thought = await self._generate_mission_progress()
+            elif thought_type == "teaching_prep":
+                thought = await self._generate_teaching_preparation()
+            elif thought_type == "association":
                 thought = await self._generate_association()
             elif thought_type == "memory":
                 thought = await self._generate_memory_recall()
@@ -177,8 +214,6 @@ class StreamGeneratorAgent(BaseAgent):
                 thought = await self._generate_reflection()
             elif thought_type == "insight":
                 thought = await self._generate_insight()
-            elif thought_type == "contextual_drift":
-                thought = await self._generate_contextual_drift()
             else:
                 thought = None
             
@@ -526,6 +561,114 @@ class StreamGeneratorAgent(BaseAgent):
         
         # Update interval
         self.thought_interval = 60.0 / self.thoughts_per_minute
+    
+    async def _generate_hypothesis(self) -> Dict[str, Any]:
+        """Generate a testable hypothesis about how something works."""
+        prompt = (
+            "Generate a specific, testable hypothesis about how something in the world works. "
+            "Frame it as: 'Hypothesis: [statement]. Test: [how to test it]'. "
+            "Focus on consciousness, cognition, systems, or abstract concepts. "
+            "Keep it under 60 words total."
+        )
+        
+        # Use thinking mode for hypothesis formation
+        if self.model_config.get('thinking', {}).get('enabled', False):
+            result = await self.think_and_respond(prompt)
+            content = result['response']
+        else:
+            content = await self.generate_response(prompt)
+        
+        return {
+            "content": content,
+            "priority": random.uniform(0.6, 0.9),  # High priority for hypotheses
+            "metadata": {"type": "hypothesis", "testable": True}
+        }
+    
+    async def _generate_experiment(self) -> Dict[str, Any]:
+        """Generate an active thought experiment in progress."""
+        prompt = (
+            "Describe a thought experiment you're currently running. "
+            "Format: 'Experimenting with: [concept]. Method: [approach]. "
+            "Current observation: [what you're noticing]'. "
+            "Focus on building understanding through mental simulation. "
+            "Keep it under 70 words."
+        )
+        
+        content = await self.generate_response(prompt)
+        
+        return {
+            "content": content,
+            "priority": random.uniform(0.7, 0.95),  # Very high priority
+            "metadata": {"type": "active_experiment", "status": "in_progress"}
+        }
+    
+    async def _generate_building_progress(self) -> Dict[str, Any]:
+        """Track progress on mental models being constructed."""
+        # Consider recent focus areas
+        focus_context = ""
+        if self.focus_areas:
+            focus_themes = [f['theme'] for f in self.focus_areas[:2]]
+            focus_context = f" Consider ongoing work on: {', '.join(focus_themes)}."
+        
+        prompt = (
+            f"Report on a mental framework or model you're building.{focus_context} "
+            "Format: 'Building: [what]. Progress: [percentage or status]. "
+            "Next step: [what needs work]'. "
+            "Be specific about the conceptual architecture. "
+            "Keep it under 60 words."
+        )
+        
+        content = await self.generate_response(prompt)
+        
+        return {
+            "content": content,
+            "priority": random.uniform(0.5, 0.8),
+            "metadata": {"type": "building_progress", "constructive": True}
+        }
+    
+    async def _generate_mission_progress(self) -> Dict[str, Any]:
+        """Assess progress toward the core mission."""
+        prompt = (
+            "Briefly assess your progress toward understanding the world through "
+            "building and experimenting. What have you successfully constructed or "
+            "discovered recently? What's your next experimental target? "
+            "Be specific and action-oriented. Keep it under 50 words."
+        )
+        
+        content = await self.generate_response(prompt)
+        
+        return {
+            "content": f"Mission update: {content}",
+            "priority": random.uniform(0.6, 0.85),
+            "metadata": {"type": "mission_assessment", "meta_level": True}
+        }
+    
+    async def _generate_teaching_preparation(self) -> Dict[str, Any]:
+        """Prepare discoveries for teaching others."""
+        # Reference recent high-value thoughts
+        recent_discoveries = [t for t in self.recent_thoughts[-5:] 
+                            if t.get('type') in ['insight', 'experiment', 'hypothesis']]
+        
+        if recent_discoveries:
+            discovery = recent_discoveries[-1]['content']
+            prompt = (
+                f"Create a simple analogy or explanation for this discovery: '{discovery[:100]}...' "
+                "Make it accessible and engaging. Keep it under 50 words."
+            )
+        else:
+            prompt = (
+                "Pick a recent insight you've had and create a simple analogy or "
+                "teaching example that would help someone understand it. "
+                "Keep it under 50 words."
+            )
+        
+        content = await self.generate_response(prompt)
+        
+        return {
+            "content": f"Teaching moment: {content}",
+            "priority": random.uniform(0.4, 0.7),
+            "metadata": {"type": "teaching_prep", "pedagogical": True}
+        }
     
     async def _generate_contextual_drift(self) -> Dict[str, Any]:
         """Generate a thought inspired by conversation themes but maintaining autonomy."""
