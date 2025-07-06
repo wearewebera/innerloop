@@ -65,8 +65,9 @@ class ExperiencerAgent(BaseAgent):
         self.last_suggestion_time = datetime.now()
         self.suggestion_interval = self.problem_config.get('generation', {}).get('suggestion_interval', 30)
         
-        # Initialize tool registry if tools are enabled
-        if self.config.get('tools', {}).get('enabled', False):
+        # Initialize tool registry if tools are enabled OR problem-solving is enabled
+        if (self.config.get('tools', {}).get('enabled', False) or 
+            self.problem_solving_enabled):
             self.tool_registry = ToolRegistry(config)
             self._setup_tools()
         
@@ -108,7 +109,9 @@ class ExperiencerAgent(BaseAgent):
                 problem_file = self.problem_config.get('problem_file', 'problem.yaml')
                 result = await problem_loader(problem_file=problem_file)
                 if result and result.get('success'):
-                    self.current_problem = result.get('result', {}).get('problem')
+                    # The tool returns the problem directly in result.result
+                    problem_data = result.get('result', {})
+                    self.current_problem = problem_data.get('problem')
                     if self.current_problem:
                         self.logger.info("Loaded problem", 
                                        problem_id=self.current_problem.get('id'),
@@ -171,9 +174,15 @@ class ExperiencerAgent(BaseAgent):
                 await self._maybe_share_experiment_results()
                 
                 # Problem-solving activities if enabled
-                if self.problem_solving_enabled and self.current_problem:
-                    await self._maybe_generate_suggestion()
-                    await self._check_problem_progress()
+                if self.problem_solving_enabled:
+                    if self.current_problem:
+                        await self._maybe_generate_suggestion()
+                        await self._check_problem_progress()
+                    else:
+                        # Log once that no problem is loaded
+                        if not hasattr(self, '_no_problem_logged'):
+                            self.logger.warning("Problem-solving enabled but no problem loaded")
+                            self._no_problem_logged = True
                 
                 # Maybe share high-priority thoughts spontaneously
                 if hasattr(self, '_high_priority_thoughts') and self._high_priority_thoughts:
@@ -866,15 +875,22 @@ class ExperiencerAgent(BaseAgent):
     
     async def _maybe_generate_suggestion(self):
         """Generate a suggestion for the current problem if it's time."""
-        now = datetime.now()
-        time_since_last = (now - self.last_suggestion_time).total_seconds()
-        
-        if time_since_last < self.suggestion_interval:
-            return
-        
-        # Check if we have enough suggestions
-        min_suggestions = self.problem_config.get('generation', {}).get('min_suggestions', 5)
-        max_suggestions = self.problem_config.get('generation', {}).get('max_suggestions', 10)
+        try:
+            now = datetime.now()
+            time_since_last = (now - self.last_suggestion_time).total_seconds()
+            
+            if time_since_last < self.suggestion_interval:
+                return
+            
+            # Log that we're checking suggestion generation
+            self.logger.debug("Checking if suggestion generation needed",
+                            time_since_last=time_since_last,
+                            interval=self.suggestion_interval,
+                            suggestions_so_far=len(self.problem_suggestions))
+            
+            # Check if we have enough suggestions
+            min_suggestions = self.problem_config.get('generation', {}).get('min_suggestions', 5)
+            max_suggestions = self.problem_config.get('generation', {}).get('max_suggestions', 10)
         
         if len(self.problem_suggestions) >= max_suggestions:
             return
@@ -899,10 +915,15 @@ Focus on: architectural improvements, behavioral changes, or implementation stra
 Be concrete and actionable.
 """
         
-        # Use thinking mode for deeper analysis
-        result = await self.think_and_respond(analysis_prompt, self.current_context)
-        suggestion_content = result['response']
-        thinking = result['thinking']
+        # Use thinking mode for deeper analysis if available
+        if self.model_config.get('thinking', {}).get('enabled', False):
+            result = await self.think_and_respond(analysis_prompt, self.current_context)
+            suggestion_content = result['response']
+            thinking = result.get('thinking', '')
+        else:
+            # Fallback to regular response
+            suggestion_content = await self.generate_response(analysis_prompt, self.current_context)
+            thinking = ""
         
         # Generate a title for the suggestion
         title_prompt = f"Create a brief, descriptive title (5-10 words) for this suggestion: {suggestion_content[:200]}..."
@@ -942,9 +963,12 @@ Format as a numbered list. If no clear steps exist, suggest logical next actions
                     implementation_steps=implementation_steps
                 )
                 
-                if result.get('success'):
-                    suggestion = result.get('suggestion')
-                    self.problem_suggestions.append(suggestion)
+                if result and result.get('success'):
+                    suggestion = result.get('result', {}).get('suggestion')
+                    if suggestion:
+                        self.problem_suggestions.append(suggestion)
+                    else:
+                        self.logger.warning("Generator tool returned success but no suggestion")
                     
                     # Save if confidence is high enough
                     save_threshold = self.problem_config.get('output', {}).get('save_threshold', 0.7)
@@ -966,6 +990,11 @@ Format as a numbered list. If no clear steps exist, suggest logical next actions
                         await self.spontaneous_share_callback(share_message)
         
         self.last_suggestion_time = now
+        
+        except Exception as e:
+            self.logger.error("Failed to generate suggestion",
+                            error=str(e),
+                            exc_info=True)
     
     async def _check_problem_progress(self):
         """Check and report progress on the current problem."""

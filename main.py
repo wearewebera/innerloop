@@ -96,7 +96,7 @@ class InnerLoop:
         logger.info("Initializing agents...")
         
         # Register agents with message bus
-        for agent_id in ['experiencer', 'stream_generator', 'attention_director', 'sleep_agent']:
+        for agent_id in ['experiencer', 'thoughts', 'attention_director', 'sleep_agent']:
             self.message_bus.register_agent(agent_id)
         
         # Create agents

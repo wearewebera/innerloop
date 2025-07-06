@@ -43,27 +43,26 @@ class ProblemLoaderTool(BaseTool):
     async def execute(self, problem_file: str = "problem.yaml") -> Dict[str, Any]:
         """Load problem definition from YAML file."""
         try:
-            with open(problem_file, 'r') as f:
-                problem_data = yaml.safe_load(f)
+            async with aiofiles.open(problem_file, mode='r') as f:
+                content = await f.read()
+                problem_data = yaml.safe_load(content)
             
             self.logger.info("Problem loaded successfully", 
                            problem_id=problem_data.get('problem', {}).get('id'))
             
             return {
-                "success": True,
                 "problem": problem_data.get('problem', {}),
                 "message": f"Loaded problem: {problem_data.get('problem', {}).get('title', 'Unknown')}"
             }
         except FileNotFoundError:
+            self.logger.warning(f"Problem file not found: {problem_file}")
             return {
-                "success": False,
                 "error": f"Problem file not found: {problem_file}",
                 "message": "No problem definition found. Please create a problem.yaml file."
             }
         except Exception as e:
             self.logger.error("Failed to load problem", error=str(e))
             return {
-                "success": False,
                 "error": str(e),
                 "message": "Failed to load problem definition"
             }
@@ -146,7 +145,6 @@ class SuggestionGeneratorTool(BaseTool):
                         confidence=confidence)
         
         return {
-            "success": True,
             "suggestion": suggestion,
             "message": f"Generated {suggestion_type} suggestion: {title}"
         }
@@ -210,7 +208,6 @@ class SuggestionSaverTool(BaseTool):
             self.logger.info("Suggestion saved", filepath=str(filepath))
             
             return {
-                "success": True,
                 "filepath": str(filepath),
                 "message": f"Saved suggestion to {filepath}"
             }
@@ -218,7 +215,6 @@ class SuggestionSaverTool(BaseTool):
         except Exception as e:
             self.logger.error("Failed to save suggestion", error=str(e))
             return {
-                "success": False,
                 "error": str(e),
                 "message": "Failed to save suggestion"
             }
@@ -315,7 +311,6 @@ class ProblemProgressTool(BaseTool):
                         completion=completion_percentage)
         
         return {
-            "success": True,
             "progress": progress,
             "completion_percentage": completion_percentage,
             "message": f"Progress: {suggestions_generated} suggestions generated ({completion_percentage:.0f}% complete)"
