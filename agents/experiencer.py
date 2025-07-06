@@ -29,11 +29,15 @@ class ExperiencerAgent(BaseAgent):
         self.external_input_queue = asyncio.Queue()
         self.is_processing = False
         
+        # Context management settings
+        self.context_window_size = self.agent_config.get('context_window_size', 100)
+        self.preserve_system_prompt = self.agent_config.get('preserve_system_prompt', True)
+        
         # User message queuing system
         self.user_message_queue = asyncio.Queue()
         self.pending_user_messages = []
         self.last_queue_evaluation = datetime.now()
-        self.queue_evaluation_interval = 5  # Check queue every 5 seconds
+        self.queue_evaluation_interval = self.agent_config.get('queue_evaluation_interval', 2)
         
         # Conversation tracking for theme extraction
         self.conversation_buffer = []
@@ -142,11 +146,13 @@ class ExperiencerAgent(BaseAgent):
         if message.message_type == "wake_context" and message.sender == "sleep_agent":
             # Process wake-up context
             self.logger.info("Received wake context")
-            # Store as important context
+            # Store as important context with tagging
+            tagged_content = self._tag_content(message.content, message.sender)
             self.current_context.append({
                 "role": "system",
-                "content": f"Wake context: {message.content}"
+                "content": tagged_content
             })
+            await self._log_context("system", tagged_content)
             # Resume experiments based on context
             await self._resume_from_sleep(message.content, message.metadata)
             
@@ -173,11 +179,13 @@ class ExperiencerAgent(BaseAgent):
             ]
             
         elif message.message_type == "memory":
-            # Memory recall from stream generator
+            # Memory recall from thoughts agent with tagging
+            tagged_content = self._tag_content(f"Recalled memory: {message.content}", message.sender)
             self.current_context.append({
                 "role": "system",
-                "content": f"Recalled memory: {message.content}"
+                "content": tagged_content
             })
+            await self._log_context("system", tagged_content)
     
     async def _process_external_input(self, input_data: Dict[str, Any]):
         """Process external input and generate a response."""
@@ -214,10 +222,12 @@ class ExperiencerAgent(BaseAgent):
                 metadata={"source": "user"}
             )
             
-            # Build conversation context
+            # Build conversation context with tagging
+            tagged_input = self._tag_content(user_input, "human")
             context = self.current_context + [
-                {"role": "user", "content": user_input}
+                {"role": "user", "content": tagged_input}
             ]
+            await self._log_context("user", tagged_input)
             
             # Add any high-priority thoughts from other agents
             recent_thoughts = self._get_recent_high_priority_thoughts()
@@ -281,10 +291,10 @@ class ExperiencerAgent(BaseAgent):
                 memory_type="conversation"
             )
             
-            # Update context
+            # Update context with response
             self.current_context.append({"role": "assistant", "content": response})
-            if len(self.current_context) > 10:
-                self.current_context = self.current_context[-10:]
+            if len(self.current_context) > self.context_window_size:
+                self.current_context = self.current_context[-self.context_window_size:]
             
             # Update conversation buffer for theme extraction
             self.conversation_buffer.append({
@@ -295,9 +305,9 @@ class ExperiencerAgent(BaseAgent):
             if len(self.conversation_buffer) > 10:
                 self.conversation_buffer = self.conversation_buffer[-10:]
             
-            # Notify stream generator of conversation activity
+            # Notify thoughts agent of conversation activity
             await self.send_message(
-                "stream_generator",
+                "thoughts",
                 "conversation_active",
                 message_type="conversation_activity",
                 priority=0.1,
@@ -340,22 +350,28 @@ class ExperiencerAgent(BaseAgent):
             metadata={"processing_type": "thought_integration"}
         )
         
-        # Add to current context based on thought type
+        # Add to current context based on thought type with tagging
         if thought_type == 'memory':
+            tagged_content = self._tag_content(f"Important memory surfaced: {thought}", "thoughts")
             self.current_context.append({
                 "role": "system",
-                "content": f"Important memory surfaced: {thought}"
+                "content": tagged_content
             })
+            await self._log_context("system", tagged_content)
         elif thought_type == 'association':
+            tagged_content = self._tag_content(f"Related thought: {thought}", "thoughts")
             self.current_context.append({
                 "role": "system", 
-                "content": f"Related thought: {thought}"
+                "content": tagged_content
             })
+            await self._log_context("system", tagged_content)
         elif thought_type == 'insight':
+            tagged_content = self._tag_content(f"New insight: {thought}", "thoughts")
             self.current_context.append({
                 "role": "system",
-                "content": f"New insight: {thought}"
+                "content": tagged_content
             })
+            await self._log_context("system", tagged_content)
     
     def _get_recent_high_priority_thoughts(self, limit: int = 3) -> List[str]:
         """Get recent high-priority thoughts from message history."""
@@ -385,9 +401,9 @@ class ExperiencerAgent(BaseAgent):
             themes = await self._extract_conversation_themes()
             
             if themes:
-                # Broadcast themes to stream generator
+                # Broadcast themes to thoughts agent
                 await self.send_message(
-                    "stream_generator",
+                    "thoughts",
                     "conversation_themes",
                     message_type="conversation_themes",
                     priority=0.3,
@@ -433,14 +449,14 @@ class ExperiencerAgent(BaseAgent):
         # After 2 minutes of no interaction, send idle notification
         if time_since_interaction > 120 and not self.idle_notification_sent:
             await self.send_message(
-                "stream_generator",
+                "thoughts",
                 "conversation_idle",
                 message_type="conversation_activity",
                 priority=0.1,
                 metadata={"active": False}
             )
             self.idle_notification_sent = True
-            self.logger.debug("Sent idle notification to stream generator")
+            self.logger.debug("Sent idle notification to thoughts agent")
     
     def _should_use_thinking(self, user_input: str) -> bool:
         """Determine if thinking mode should be used based on input complexity."""
@@ -529,9 +545,9 @@ class ExperiencerAgent(BaseAgent):
                         'status': 'running'
                     })
                     
-                    # Notify stream generator
+                    # Notify thoughts agent
                     await self.send_message(
-                        "stream_generator",
+                        "thoughts",
                         f"Started experiment: {experiment[:100]}...",
                         message_type="experiment_started",
                         priority=0.7
@@ -680,8 +696,8 @@ class ExperiencerAgent(BaseAgent):
             # Determine if we should process this message
             should_process = False
             
-            # Always process messages waiting more than 30 seconds
-            if wait_time > 30:
+            # Always process messages waiting more than 60 seconds
+            if wait_time > 60:
                 should_process = True
                 msg['priority'] = 0.9
             else:

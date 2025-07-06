@@ -32,7 +32,7 @@ class SleepAgent(BaseAgent):
         self.is_sleeping = False
         self.message_history = []
         self.pattern_counts = defaultdict(int)
-        self.agents_to_manage = ['experiencer', 'stream_generator', 'attention_director']
+        self.agents_to_manage = ['experiencer', 'thoughts', 'attention_director']
         
         # Sleep summaries
         self.sleep_summaries = []

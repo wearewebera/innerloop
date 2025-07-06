@@ -126,7 +126,7 @@ class ThoughtDisplay:
         
         if self.show_metadata:
             parts.append(f" ({thought['priority']:.2f})")
-            if thought['sender'] != 'stream_generator':
+            if thought['sender'] != 'thoughts':
                 parts.append(f" from {thought['sender']}")
         
         parts.append(f"{self.DIM_COLOR}]:{self.RESET_COLOR} ")

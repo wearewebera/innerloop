@@ -58,11 +58,11 @@ class AgentPanel(RichLog):
         self.write(thought_text)
 
 
-class StreamGeneratorPanel(AgentPanel):
+class ThoughtsPanel(AgentPanel):
     """Panel showing raw stream of consciousness."""
     
     def __init__(self):
-        super().__init__("Stream Generator", wrap=True, highlight=True, markup=True, max_lines=500, auto_scroll=True)
+        super().__init__("Thoughts", wrap=True, highlight=True, markup=True, max_lines=500, auto_scroll=True)
         
 
 class AttentionDirectorPanel(RichLog):
@@ -305,7 +305,7 @@ class InnerLoopTUI(App):
         
         # Create panels - order matters for grid layout
         # Top row: three monitoring panels
-        self.stream_panel = StreamGeneratorPanel()
+        self.stream_panel = ThoughtsPanel()
         self.stream_panel.id = "stream-panel"
         yield self.stream_panel
         

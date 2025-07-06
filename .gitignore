@@ -35,6 +35,7 @@ env/
 # Project specific
 conversation_history.db
 *.log
+logs/
 .env
 
 # OS

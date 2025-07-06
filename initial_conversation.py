@@ -25,7 +25,7 @@ class InitialConversation:
                 "theme": "consciousness_exploration",
                 "messages": [
                     {
-                        "from": "stream_generator",
+                        "from": "thoughts",
                         "to": "experiencer",
                         "content": "Hypothesis: Consciousness might be an emergent property of recursive self-observation. Let me design an experiment to test this...",
                         "type": "hypothesis",
@@ -33,7 +33,7 @@ class InitialConversation:
                     },
                     {
                         "from": "experiencer",
-                        "to": "stream_generator",
+                        "to": "thoughts",
                         "content": "Fascinating hypothesis! I'm starting Experiment #1: Building a recursive observation framework. First, I'll create a simple self-referential loop...",
                         "type": "experiment_start",
                         "priority": 0.9
@@ -51,7 +51,7 @@ class InitialConversation:
                 "theme": "pattern_recognition",
                 "messages": [
                     {
-                        "from": "stream_generator",
+                        "from": "thoughts",
                         "to": "experiencer",
                         "content": "I'm noticing patterns in how complex systems organize themselves. What if we built a framework that maps these organizational principles?",
                         "type": "pattern_observation",
@@ -59,13 +59,13 @@ class InitialConversation:
                     },
                     {
                         "from": "experiencer",
-                        "to": "stream_generator",
+                        "to": "thoughts",
                         "content": "Excellent observation! I'll construct a pattern-mapping framework. Starting with simple systems and scaling up. My current model is 30% complete...",
                         "type": "building_progress",
                         "priority": 0.8
                     },
                     {
-                        "from": "stream_generator",
+                        "from": "thoughts",
                         "to": "attention_director",
                         "content": "Testing connection: Do fractals in nature follow the same organizational principles as emergent behaviors in consciousness?",
                         "type": "experimental_association",
@@ -78,13 +78,13 @@ class InitialConversation:
                 "messages": [
                     {
                         "from": "experiencer",
-                        "to": "stream_generator",
+                        "to": "thoughts",
                         "content": "Running Experiment #2: If creativity is combinatorial, then novel combinations of unrelated concepts should yield insights. Testing with 'time' + 'emotion'...",
                         "type": "active_experiment",
                         "priority": 0.85
                     },
                     {
-                        "from": "stream_generator",
+                        "from": "thoughts",
                         "to": "experiencer",
                         "content": "Building on your experiment: What if emotions are temporal patterns? Joy as acceleration, sadness as deceleration of internal time...",
                         "type": "hypothesis",
@@ -103,7 +103,7 @@ class InitialConversation:
                 "theme": "learning_architecture",
                 "messages": [
                     {
-                        "from": "stream_generator",
+                        "from": "thoughts",
                         "to": "experiencer",
                         "content": "What if learning is just pattern compression? Every new understanding is finding a simpler representation of complex data.",
                         "type": "insight",
@@ -111,13 +111,13 @@ class InitialConversation:
                     },
                     {
                         "from": "experiencer",
-                        "to": "stream_generator",
+                        "to": "thoughts",
                         "content": "Brilliant! I'm building a compression-based learning model. Initial tests show promise. Let me try teaching this concept using data compression as an analogy...",
                         "type": "teaching_preparation",
                         "priority": 0.8
                     },
                     {
-                        "from": "stream_generator",
+                        "from": "thoughts",
                         "to": "attention_director",
                         "content": "Memory recall: This connects to our earlier work on recursive patterns. Perhaps recursion IS a form of compression?",
                         "type": "memory",
@@ -212,7 +212,7 @@ class InitialConversation:
         
         # Generate some initial experimental thoughts
         await self.message_bus.send(
-            sender="stream_generator",
+            sender="thoughts",
             recipient="attention_director",
             content="Continuing pattern analysis from earlier experiments. The recursive nature of understanding itself is fascinating...",
             message_type="thought",

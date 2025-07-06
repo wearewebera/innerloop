@@ -9,6 +9,7 @@ from pathlib import Path
 import structlog
 from ollama import AsyncClient
 from pydantic import BaseModel, Field
+import aiofiles
 
 logger = structlog.get_logger()
 
@@ -66,6 +67,11 @@ class BaseAgent(ABC):
         # Build agent prompt
         self.system_prompt = self._build_system_prompt()
         
+        # Set up context logging
+        self.logs_dir = Path("logs")
+        self.logs_dir.mkdir(exist_ok=True)
+        self.log_file_path = self.logs_dir / f"{agent_id}.log"
+        
     def _build_system_prompt(self) -> str:
         """Build the system prompt combining identity and role from files."""
         prompts_dir = Path("prompts")
@@ -113,6 +119,44 @@ class BaseAgent(ABC):
         
         return full_prompt
     
+    def _tag_content(self, content: str, sender: str) -> str:
+        """Add source tags to content based on sender."""
+        # Map sender IDs to tag names
+        tag_map = {
+            "human": "human",
+            "user": "human",
+            "external": "human",
+            "stream_generator": "thoughts",
+            "thoughts": "thoughts",
+            "experiencer": "experiencer",
+            "attention_director": "attention",
+            "sleep_agent": "sleep"
+        }
+        
+        # Get tag for sender, default to sender name if not mapped
+        tag = tag_map.get(sender.lower(), sender)
+        
+        # Format with tags
+        return f"<{tag}>\n{content}\n</{tag}>"
+    
+    async def _log_context(self, role: str, content: str, sender: str = None):
+        """Log context to agent's log file."""
+        try:
+            timestamp = datetime.now().isoformat()
+            
+            # Apply tagging if sender is provided
+            if sender:
+                content = self._tag_content(content, sender)
+            
+            # Format log entry
+            log_entry = f"\n[{timestamp}] [{role.upper()}]\n{content}\n{'='*80}\n"
+            
+            # Append to log file
+            async with aiofiles.open(self.log_file_path, mode='a', encoding='utf-8') as f:
+                await f.write(log_entry)
+                
+        except Exception as e:
+            self.logger.error("Failed to log context", error=str(e))
     
     async def start(self):
         """Start the agent's main loop."""
@@ -154,6 +198,9 @@ class BaseAgent(ABC):
         """Generate a response using Ollama with optional thinking mode."""
         messages = [{"role": "system", "content": self.system_prompt}]
         
+        # Log the prompt
+        await self._log_context("user", prompt)
+        
         if context:
             messages.extend(context)
         
@@ -170,6 +217,7 @@ class BaseAgent(ABC):
                 "options": {
                     "temperature": self.model_config['temperature'],
                     "num_predict": self.model_config['max_tokens'],
+                    "num_ctx": self.model_config.get('num_ctx', 128000),  # Use configured context window
                 }
             }
             
@@ -216,12 +264,17 @@ class BaseAgent(ABC):
                     options={
                         "temperature": self.model_config['temperature'],
                         "num_predict": self.model_config['max_tokens'],
+                        "num_ctx": self.model_config.get('num_ctx', 128000),
                     }
                 )
                 
-                return final_response['message']['content']
+                result = final_response['message']['content']
+                await self._log_context("assistant", result)
+                return result
             
-            return response['message']['content']
+            result = response['message']['content']
+            await self._log_context("assistant", result)
+            return result
             
         except Exception as e:
             self.logger.error("Ollama generation failed", error=str(e))
@@ -256,6 +309,10 @@ class BaseAgent(ABC):
         if messages:
             self.last_activity = datetime.now()
             self.logger.debug("Messages received", count=len(messages))
+            
+            # Log received messages with tags
+            for msg in messages:
+                await self._log_context("received", msg.content, sender=msg.sender)
             
             # Check for system commands
             for msg in messages[:]:  # Use slice to allow removal during iteration
@@ -361,6 +418,7 @@ class BaseAgent(ABC):
                     "num_predict": self.model_config.get('thinking', {}).get(
                         'max_thinking_tokens', self.model_config['max_tokens']
                     ),
+                    "num_ctx": self.model_config.get('num_ctx', 128000),
                 }
             )
             

@@ -11,7 +11,7 @@ This folder contains the system prompts for each agent in the InnerLoop architec
 
 - `shared_identity.md` - Common identity shared by all agents (templated)
 - `experiencer.md` - System prompt for the Experiencer agent
-- `stream_generator.md` - System prompt for the Stream Generator
+- `thoughts.md` - System prompt for the Thoughts agent
 - `attention_director.md` - System prompt for the Attention Director
 
 ## How It Works
@@ -26,7 +26,7 @@ This folder contains the system prompts for each agent in the InnerLoop architec
 Feel free to modify these prompts to experiment with different agent behaviors:
 
 - Adjust personality traits in `shared_identity.md`
-- Change thought generation patterns in `stream_generator.md`
+- Change thought generation patterns in `thoughts.md`
 - Modify attention criteria in `attention_director.md`
 - Alter conversation style in `experiencer.md`
 

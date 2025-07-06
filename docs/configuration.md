@@ -16,7 +16,7 @@ agents:
     name: "Alex"
     personality: "curious, analytical, thoughtful"
     
-  stream_generator:
+  thoughts:
     thoughts_per_minute: 1    # Autonomous thought frequency
     
   attention_director:
@@ -50,7 +50,7 @@ memory:
 
 ### Agent Configuration
 - **shared_identity**: Common personality traits shared by all agents
-- **stream_generator.thoughts_per_minute**: How often autonomous thoughts are generated
+- **thoughts.thoughts_per_minute**: How often autonomous thoughts are generated
 - **attention_director.priority_threshold**: Minimum score for thoughts to pass through
 - **attention_director.attention_budget**: Maximum thoughts processed per cycle
 

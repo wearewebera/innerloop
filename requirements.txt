@@ -6,6 +6,7 @@ pyyaml==6.0.1              # Config files
 structlog==24.2.0          # Structured logging
 python-dotenv==1.0.1       # Environment variables
 aiosqlite==0.20.0          # Async SQLite for logging
+aiofiles==24.1.0           # Async file I/O for agent logging
 prometheus-client==0.20.0  # Metrics tracking
 pytest==8.2.2              # Testing
 pytest-asyncio==0.23.7     # Async testing

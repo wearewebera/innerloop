@@ -18,7 +18,7 @@ InnerLoop consists of three specialized agents working in coordination:
 - **Function**: Processes information, makes final decisions, handles external interactions
 - **Analogy**: The "conscious mind" that experiences and decides
 
-### 2. The Stream Generator  
+### 2. The Thoughts Agent  
 - **Role**: Autonomous thought generator
 - **Function**: Continuously produces background thoughts, associations, memories, and ideas
 - **Analogy**: The stream of consciousness/background mental chatter
@@ -32,7 +32,7 @@ InnerLoop consists of three specialized agents working in coordination:
 
 1. **Continuous Processing**: All three agents run concurrently in async loops
 
-2. **Thought Generation**: Stream Generator produces thoughts every ~60 seconds:
+2. **Thought Generation**: Thoughts agent produces thoughts every ~60 seconds:
    - Associations with recent topics (using reasoning for focused areas)
    - Memory recalls
    - Wonderings and reflections

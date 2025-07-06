@@ -4,16 +4,19 @@
 # ollama_host: "http://localhost:11434"
 
 model:
-  name: "deepseek-r1:14b"    # DeepSeek reasoning model (14B parameters)
-  temperature: 0.7           # Creativity level (0.0-1.0)
-  max_tokens: 512            # Maximum response length
-  timeout: 45                # Seconds to wait for response (increased for 14B)
+  name: "deepseek-r1:8b"         # DeepSeek reasoning model (14B parameters)
+  temperature: 0.7               # Creativity level (0.0-1.0)
+  max_tokens: 4192               # Maximum response length
+  timeout: 45                    # Seconds to wait for response (increased for 14B)
+  # Context window settings
+  num_ctx: 64000                 # Use full 128K context window of DeepSeek-R1
   # Thinking model settings
   thinking:
-    enabled: true            # Enable thinking/reasoning mode
-    display_thinking: true   # Show thinking in UI
-    think_temperature: 0.9   # Higher temperature for creative thinking
-    max_thinking_tokens: 1024 # Longer thinking allowed
+    enabled: true                # Enable thinking/reasoning mode
+    display_thinking: true       # Show thinking in UI
+    think_temperature: 0.9       # Higher temperature for creative thinking
+    max_thinking_tokens: 1024    # Longer thinking allowed
+    include_in_context: false    # Keep thinking separate from conversation context
 
 agents:
   shared_identity:
@@ -30,22 +33,25 @@ agents:
   # Agent prompts are now loaded from markdown files in prompts/ folder:
   # - prompts/shared_identity.md (used by all agents)
   # - prompts/experiencer.md
-  # - prompts/stream_generator.md
+  # - prompts/thoughts.md
   # - prompts/attention_director.md
   
   experiencer:
     role: "primary consciousness and decision maker"
     response_style: "thoughtful and engaging"
+    # Context management settings
+    context_window_size: 100        # Keep up to 100 messages in context (was 10)
+    preserve_system_prompt: true    # Always include system prompt
     # Message queuing settings
-    queue_evaluation_interval: 5    # Check queue every 5 seconds
-    max_queue_wait: 30             # Process after 30 seconds regardless
+    queue_evaluation_interval: 2    # Check queue every 2 seconds
+    max_queue_wait: 60             # Process after 60 seconds regardless
     autonomous_share_interval: 20   # Share experiments every 20 seconds when idle
     mission_check_interval: 180     # Check mission progress every 3 minutes
     # Experiment settings
     max_active_experiments: 3       # Maximum concurrent experiments
     experiment_timeout: 600         # Abandon experiments after 10 minutes
   
-  stream_generator:
+  thoughts:
     role: "autonomous experimental thought laboratory"  
     thoughts_per_minute: 2    # Increased for more active experimentation
     context_window: 10        # Number of recent memories to consider
@@ -126,6 +132,14 @@ logging:
   file: "innerloop.log"
   max_size_mb: 100
   rotate_count: 5
+
+# Agent context logging
+agent_context_logging:
+  enabled: true              # Enable logging of agent contexts to text files
+  directory: "logs"          # Directory for agent log files
+  max_entries: 10000         # Maximum entries per log file before rotation
+  include_metadata: true     # Include message metadata in logs
+  timestamp_format: "iso"    # ISO 8601 timestamp format
 
 performance:
   message_queue_size: 1000

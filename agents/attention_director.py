@@ -539,7 +539,7 @@ class AttentionDirectorAgent(BaseAgent):
                 
                 # Notify about focus fade
                 await self.send_message(
-                    "stream_generator",
+                    "thoughts",
                     f"Focus fading: {focus.theme}",
                     message_type="focus_shift",
                     priority=0.3,
@@ -625,7 +625,7 @@ class AttentionDirectorAgent(BaseAgent):
                     )
                     
                     await self.send_message(
-                        "stream_generator",
+                        "thoughts",
                         f"New focus area: {theme}",
                         message_type="focus_emergence",
                         priority=0.7,

@@ -14,7 +14,7 @@ import argparse
 sys.path.insert(0, str(Path(__file__).parent))
 
 from agents.experiencer import ExperiencerAgent
-from agents.stream_generator import StreamGeneratorAgent
+from agents.thoughts import ThoughtsAgent
 from agents.attention_director import AttentionDirectorAgent
 from agents.sleep_agent import SleepAgent
 from communication.message_bus import MessageBus
@@ -104,7 +104,7 @@ class InnerLoop:
             self.config, self.message_bus, self.memory_store
         )
         
-        self.agents['stream_generator'] = StreamGeneratorAgent(
+        self.agents['thoughts'] = ThoughtsAgent(
             self.config, self.message_bus, self.memory_store
         )
         

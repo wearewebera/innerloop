@@ -1,4 +1,4 @@
-"""Stream Generator Agent - Autonomous thought generator."""
+"""Thoughts Agent - Autonomous thought generator."""
 
 import asyncio
 import random
@@ -11,14 +11,14 @@ from agents.base_agent import BaseAgent
 logger = structlog.get_logger()
 
 
-class StreamGeneratorAgent(BaseAgent):
+class ThoughtsAgent(BaseAgent):
     """
-    The Stream Generator creates autonomous thoughts, associations, and memories.
+    The Thoughts agent creates autonomous thoughts, associations, and memories.
     It represents the continuous background mental activity.
     """
     
     def __init__(self, config: Dict[str, Any], message_bus: Any, memory_store: Any):
-        super().__init__("stream_generator", config, message_bus, memory_store)
+        super().__init__("thoughts", config, message_bus, memory_store)
         
         # Stream generation settings
         self.base_thoughts_per_minute = self.agent_config.get('thoughts_per_minute', 1)
@@ -73,8 +73,8 @@ class StreamGeneratorAgent(BaseAgent):
         self.thought_interval = 60.0 / self.thoughts_per_minute
         
     async def _initialize(self):
-        """Initialize the Stream Generator."""
-        self.logger.info("Stream Generator initializing",
+        """Initialize the Thoughts agent."""
+        self.logger.info("Thoughts agent initializing",
                         base_thoughts_per_minute=self.base_thoughts_per_minute,
                         adaptive_enabled=self.adaptive_enabled,
                         conversation_awareness=self.conversation_awareness_enabled)
@@ -106,7 +106,7 @@ class StreamGeneratorAgent(BaseAgent):
     
     async def _run_loop(self):
         """Main loop - generate autonomous thoughts continuously."""
-        self.logger.info("Stream Generator started")
+        self.logger.info("Thoughts agent started")
         
         while self.is_running:
             try:
@@ -132,7 +132,7 @@ class StreamGeneratorAgent(BaseAgent):
                 
                 # Log timing info periodically
                 if int(time_since_last) % 30 == 0 and int(time_since_last) > 0:
-                    self.logger.info("Stream Generator timing check",
+                    self.logger.info("Thoughts agent timing check",
                                    time_since_last_thought=time_since_last,
                                    thought_interval=self.thought_interval,
                                    thoughts_per_minute=self.thoughts_per_minute,
@@ -149,7 +149,7 @@ class StreamGeneratorAgent(BaseAgent):
                 await asyncio.sleep(0.5)
                 
             except Exception as e:
-                self.logger.error("Stream generation error", error=str(e), exc_info=True)
+                self.logger.error("Thought generation error", error=str(e), exc_info=True)
                 await asyncio.sleep(1)
     
     async def _generate_thought(self):
@@ -753,7 +753,7 @@ class StreamGeneratorAgent(BaseAgent):
     
     async def _cleanup(self):
         """Clean up resources."""
-        self.logger.info("Stream Generator shutting down")
+        self.logger.info("Thoughts agent shutting down")
         self.message_bus.unsubscribe(self.agent_id, "external_input")
         if self.conversation_awareness_enabled:
             self.message_bus.unsubscribe(self.agent_id, "conversation_themes")
