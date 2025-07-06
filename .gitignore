@@ -44,3 +44,7 @@ Thumbs.db
 
 .venv
 .env
+
+*.db
+
+suggestions/*
