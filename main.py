@@ -157,34 +157,55 @@ class InnerLoop:
             elif isinstance(models, dict) and 'models' in models:
                 model_list = models['models']
             
+            # First, check for exact model name match
             for m in model_list:
-                # Check for 'model' attribute (ollama library) or 'name' (dict)
-                m_name = None
+                # Handle different model object types
                 if hasattr(m, 'model'):
                     m_name = m.model
-                elif isinstance(m, dict) and 'model' in m:
-                    m_name = m['model']
+                elif hasattr(m, 'name'):
+                    m_name = m.name
                 elif isinstance(m, dict) and 'name' in m:
-                    m_name = m['name']
-                
-                if m_name and m_name.startswith(model_name.split(':')[0]):
+                    m_name = m.get('name')
+                else:
+                    continue
+                    
+                if m_name == model_name:
                     model_found = True
                     break
             
             if not model_found:
-                logger.warning(f"Model '{model_name}' not found in Ollama")
-                # Extract model names for display
+                # If exact match not found, check for base model name
+                base_model_name = model_name.split(':')[0]
+                for m in model_list:
+                    # Handle different model object types
+                    if hasattr(m, 'model'):
+                        m_name = m.model
+                    elif hasattr(m, 'name'):
+                        m_name = m.name
+                    elif isinstance(m, dict) and 'name' in m:
+                        m_name = m.get('name')
+                    else:
+                        continue
+                        
+                    if m_name and m_name.startswith(base_model_name):
+                        logger.warning(f"Exact model '{model_name}' not found, but found base model '{m_name}'")
+                        logger.warning("This may lead to unexpected behavior. Please pull the correct model version.")
+                        model_found = True # Allow to proceed with warning
+                        break
+
+            if not model_found:
+                logger.error(f"Model '{model_name}' not found in Ollama")
                 available = []
                 for m in model_list:
                     if hasattr(m, 'model'):
                         available.append(m.model)
-                    elif isinstance(m, dict) and 'model' in m:
-                        available.append(m['model'])
+                    elif hasattr(m, 'name'):
+                        available.append(m.name)
                     elif isinstance(m, dict) and 'name' in m:
-                        available.append(m['name'])
+                        available.append(m.get('name'))
                 logger.info(f"Available models: {available}")
-                logger.warning(f"Please run: ollama pull {model_name}")
-                # Don't fail, just warn - the model might still work
+                logger.error(f"Please run: ollama pull {model_name}")
+                raise ValueError(f"Required model '{model_name}' not available in Ollama.")
             else:
                 logger.info(f"Model '{model_name}' is available")
                 
